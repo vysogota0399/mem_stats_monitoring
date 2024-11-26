@@ -53,8 +53,8 @@ func SerLogger(logger utils.Logger) NewServerOption {
 }
 
 func (s Server) String() string {
-	return fmt.Sprintf("Host: %s\nPort: %d", s.config.Host, s.config.Port)
+	return fmt.Sprintf("Host: %s\nPort: %d", s.config.host, s.config.port)
 }
 func (s *Server) address() string {
-	return fmt.Sprintf("%s:%d", s.config.Host, s.config.Port)
+	return fmt.Sprintf("%s:%d", s.config.host, s.config.port)
 }

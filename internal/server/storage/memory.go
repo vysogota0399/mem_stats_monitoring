@@ -3,6 +3,7 @@ package storage
 import (
 	"encoding/json"
 	"errors"
+	"sync"
 
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
 )
@@ -27,6 +28,7 @@ type Storage interface {
 type Memory struct {
 	storage map[string]map[string][]string
 	logger  utils.Logger
+	mutex   sync.Mutex
 }
 
 func NewMemoryStorage() *Memory {
@@ -36,10 +38,14 @@ func NewMemoryStorage() *Memory {
 	return &Memory{
 		logger:  logger,
 		storage: storage,
+		mutex:   sync.Mutex{},
 	}
 }
 
 func (m *Memory) Push(mType, mName string, val any) error {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
 	m.logger.Printf("Push type %v, name %v value: %v", mType, mName, val)
 	mTypeStorage, ok := m.storage[mType]
 	if !ok {
