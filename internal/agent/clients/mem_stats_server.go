@@ -1,6 +1,7 @@
 package clients
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -9,14 +10,16 @@ import (
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
 )
 
+var ErrUnsuccessfulResponse error = errors.New("mem_stats_server: response not success")
+
 type MemStatsServer struct {
 	client  *http.Client
 	address string
 	logger  utils.Logger
 }
 
-func NewMemStatsServer(address string) MemStatsServer {
-	return MemStatsServer{address: address, client: &http.Client{}, logger: utils.InitLogger("[http]")}
+func NewMemStatsServer(address string) *MemStatsServer {
+	return &MemStatsServer{address: address, client: &http.Client{}, logger: utils.InitLogger("[http]")}
 }
 
 func (c *MemStatsServer) UpdateMetric(mType, mName, value string, requestID uuid.UUID) error {
@@ -33,10 +36,15 @@ func (c *MemStatsServer) UpdateMetric(mType, mName, value string, requestID uuid
 
 	resp, err := c.requestDo(req, requestID)
 
-	if err != nil || resp.StatusCode != http.StatusOK {
+	if err != nil {
 		c.logger.Printf("[%v] mem_stats_server: do request error: %v", requestID, err)
 		return err
 	}
+
+	if resp.StatusCode != http.StatusOK {
+		return ErrUnsuccessfulResponse
+	}
+
 	defer resp.Body.Close()
 
 	return nil

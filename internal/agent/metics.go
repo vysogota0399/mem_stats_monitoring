@@ -13,13 +13,31 @@ import (
 
 type MemValueGenerator func(*runtime.MemStats) any
 
+type Reportable interface {
+	fromStore(s storage.Storage) (*models.Metric, error)
+}
+
 type MemMetric struct {
 	Name          string
 	Type          string
 	generateValue MemValueGenerator
 }
 
-var memMetrics []MemMetric = []MemMetric{
+func (m MemMetric) fromStore(s storage.Storage) (*models.Metric, error) {
+	return s.Get(m.Type, m.Name)
+}
+
+type CustomMetric struct {
+	Name          string
+	Type          string
+	generateValue func(mName, mType string, a *Agent) (uint64, error)
+}
+
+func (c CustomMetric) fromStore(s storage.Storage) (*models.Metric, error) {
+	return s.Get(c.Type, c.Name)
+}
+
+var memMetricsDefinition []MemMetric = []MemMetric{
 	{
 		Name: "Alloc", Type: "gauge",
 		generateValue: func(stat *runtime.MemStats) any { return stat.Alloc },
@@ -130,10 +148,42 @@ var memMetrics []MemMetric = []MemMetric{
 	},
 }
 
-func processMemMetrics(a *Agent, operationID uuid.UUID) {
+var customMetricsDefinition = []CustomMetric{
+	{
+		Name: "PollCount",
+		Type: "counter",
+		generateValue: func(mName, mType string, a *Agent) (uint64, error) {
+			var val uint64
+			last, err := a.storage.Get(mType, mName)
+			if err != nil && err != storage.ErrNoRecords {
+				return val, err
+			}
+
+			if last == nil {
+				val = 0
+			} else {
+				val, err = strconv.ParseUint(last.Value, 10, 64)
+				if err != nil {
+					return val, err
+				}
+			}
+
+			return val + 1, nil
+		},
+	},
+	{
+		Name: "RandomValue",
+		Type: "gauge",
+		generateValue: func(mName, mType string, a *Agent) (uint64, error) {
+			return rand.Uint64(), nil
+		},
+	},
+}
+
+func (a *Agent) processMemMetrics(operationID uuid.UUID) {
 	memStat := runtime.MemStats{}
 
-	for _, m := range memMetrics {
+	for _, m := range a.memoryMetics {
 		val, err := convertToStr(m.generateValue(&memStat))
 		if err != nil {
 			a.pollerLogger.Printf("[%v] %v", operationID, err)
@@ -153,44 +203,8 @@ func processMemMetrics(a *Agent, operationID uuid.UUID) {
 	}
 }
 
-func processCustomMetrics(a *Agent, operationID uuid.UUID) {
-	metrics := []struct {
-		Name          string
-		Type          string
-		generateValue func(mName, mType string, a *Agent) (uint64, error)
-	}{
-		{
-			Name: "PollCount",
-			Type: "counter",
-			generateValue: func(mName, mType string, a *Agent) (uint64, error) {
-				var val uint64
-				last, err := a.storage.Get(mType, mName)
-				if err != nil && err != storage.ErrNoRecords {
-					return val, err
-				}
-
-				if last == nil {
-					val = 0
-				} else {
-					val, err = strconv.ParseUint(last.Value, 10, 64)
-					if err != nil {
-						return val, err
-					}
-				}
-
-				return val + 1, nil
-			},
-		},
-		{
-			Name: "RandomValue",
-			Type: "gauge",
-			generateValue: func(mName, mType string, a *Agent) (uint64, error) {
-				return rand.Uint64(), nil
-			},
-		},
-	}
-
-	for _, m := range metrics {
+func (a *Agent) processCustomMetrics(operationID uuid.UUID) {
+	for _, m := range a.customMetrics {
 		val, err := m.generateValue(m.Name, m.Type, a)
 		if err != nil {
 			a.pollerLogger.Printf("[%v] generate value error\berror:%w", operationID, err)

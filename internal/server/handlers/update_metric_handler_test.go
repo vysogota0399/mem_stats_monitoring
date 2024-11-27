@@ -80,8 +80,9 @@ func TestNewUpdateMetricHandler(t *testing.T) {
 
 			subject := UpdateMetricHandler{logger: utils.InitLogger("[test]"), storage: nil, metricsUpdater: tt.metricsUpdater}
 			subject.ServeHTTP(w, r)
-
-			assert.Equal(t, tt.want.statusCode, w.Result().StatusCode, "%s %s \n%v", tt.method, tt.url, tt.headers)
+			response := w.Result()
+			assert.Equal(t, tt.want.statusCode, response.StatusCode, "%s %s \n%v", tt.method, tt.url, tt.headers)
+			response.Body.Close()
 		})
 	}
 }
