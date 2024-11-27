@@ -21,20 +21,24 @@ func NewGauge(storage storage.Storage) Gauge {
 	}
 }
 
-func (g *Gauge) Craete(record models.Gauge) error {
-	return g.storage.Push(g.mType, record.Name, record)
-}
-
-func (g Gauge) Last(mName string) (models.Gauge, error) {
-	record, err := g.storage.Last(g.mType, mName)
-	if err != nil {
-		return models.Gauge{}, err
+func (g *Gauge) Craete(record models.Gauge) (models.Gauge, error) {
+	if err := g.storage.Push(g.mType, record.Name, record); err != nil {
+		return record, err
 	}
 
-	var gauge models.Gauge
+	return record, nil
+}
 
-	if err := json.Unmarshal([]byte(record), &gauge); err != nil {
-		return models.Gauge{}, err
+func (g Gauge) Last(mName string) (*models.Gauge, error) {
+	record, err := g.storage.Last(g.mType, mName)
+	if err != nil {
+		return nil, err
+	}
+
+	var gauge *models.Gauge
+
+	if err := json.Unmarshal([]byte(record), gauge); err != nil {
+		return nil, err
 	}
 
 	return gauge, nil

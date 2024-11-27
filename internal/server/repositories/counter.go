@@ -21,30 +21,36 @@ func NewCounter(storage storage.Storage) Counter {
 	}
 }
 
-func (c *Counter) Craete(record models.Counter) error {
+func (c *Counter) Craete(record models.Counter) (models.Counter, error) {
 	var counter int64
 	last, err := c.Last(record.Name)
-	if err != nil && err != storage.ErrNoRecords {
-		return err
+	if err != nil {
+		if err != storage.ErrNoRecords {
+			return record, err
+		}
 	} else {
 		counter = last.Value
 	}
 
 	record.Value += counter
-	return c.storage.Push(c.mType, record.Name, record)
+	if err := c.storage.Push(c.mType, record.Name, record); err != nil {
+		return record, err
+	}
+
+	return record, nil
 }
 
-func (c Counter) Last(mName string) (models.Counter, error) {
+func (c Counter) Last(mName string) (*models.Counter, error) {
 	record, err := c.storage.Last(c.mType, mName)
 	if err != nil {
-		return models.Counter{}, err
+		return nil, err
 	}
 
 	var Counter models.Counter
 
 	if err := json.Unmarshal([]byte(record), &Counter); err != nil {
-		return models.Counter{}, err
+		return nil, err
 	}
 
-	return Counter, nil
+	return &Counter, nil
 }

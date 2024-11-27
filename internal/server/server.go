@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/vysogota0399/mem_stats_monitoring/internal/server/handlers"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
 )
@@ -31,13 +32,13 @@ func NewServer(c Config, options ...NewServerOption) (*Server, error) {
 		s.logger = utils.InitLogger("[server]")
 	}
 
-	s.storage = storage.NewMemoryStorage()
+	s.storage = storage.New()
 	return &s, nil
 }
 
 func (s *Server) Start() error {
 	s.logger.Printf("Start\n%v", s)
-	s.mux.Handle(`/update/`, Conveyor(UpdateMetricHandler{logger: s.logger, app: s}, RequestLogger))
+	s.mux.Handle(`/update/`, Conveyor(handlers.NewUpdateMetricHandler(s.storage, s.logger), RequestLogger))
 
 	if err := http.ListenAndServe(s.address(), s.mux); err != nil {
 		return err

@@ -8,12 +8,12 @@ import (
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
 )
 
-var ErrNoRecords = errors.New("memory: no records error")
-
 type Storage interface {
 	Last(mType, mName string) (string, error)
 	Push(mType, mName string, val any) error
 }
+
+var ErrNoRecords = errors.New("memory: no records error")
 
 // storage
 //
@@ -31,13 +31,18 @@ type Memory struct {
 	mutex   sync.Mutex
 }
 
-func NewMemoryStorage() *Memory {
-	logger := utils.InitLogger("[storage]")
-	storage := make(map[string]map[string][]string)
+func NewMemStorageWithData(storage map[string]map[string][]string, logger utils.Logger) *Memory {
+	return &Memory{storage: storage, logger: logger}
+}
 
+func New() Storage {
+	return NewMemory()
+}
+
+func NewMemory() *Memory {
 	return &Memory{
-		logger:  logger,
-		storage: storage,
+		logger:  utils.InitLogger("[storage]"),
+		storage: make(map[string]map[string][]string),
 		mutex:   sync.Mutex{},
 	}
 }
