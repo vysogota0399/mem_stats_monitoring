@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"net/http"
+
 	"github.com/gin-gonic/gin"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/handlers"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
@@ -37,9 +38,7 @@ func NewServer(c Config, options ...NewServerOption) (*Server, error) {
 }
 
 func (s *Server) Start() error {
-	// path, _ := os.Getwd()
-	// s.router.LoadHTMLGlob(fmt.Sprintf("%s/../../internal/server/templates/*.tmpl", path))
-	s.router.LoadHTMLGlob("templates/*.tmpl")
+	s.router.LoadHTMLGlob("internal/server/templates/*.tmpl")
 	s.router.POST("/update/:type/:name/:value", handlers.NewUpdateMetricHandler(s.storage, s.logger))
 	s.router.GET("/value/:type/:name", handlers.NewShowMetricHandler(s.storage, s.logger))
 	s.router.GET("/", handlers.NewRootHandler(s.storage, s.logger))
