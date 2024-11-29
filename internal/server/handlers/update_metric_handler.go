@@ -70,10 +70,10 @@ func updateMetricHandlerFunc(h *UpdateMetricHandler) gin.HandlerFunc {
 }
 
 func validateHeader(r *http.Request) error {
-	contentType := r.Header.Get("Content-Type")
-	if contentType != updateMeticsContentType {
-		return fmt.Errorf("update_metric_handler: expected content type: %s, got: %s", updateMeticsContentType, contentType)
-	}
+	// contentType := r.Header.Get("Content-Type")
+	// if contentType != updateMeticsContentType {
+	// 	return fmt.Errorf("update_metric_handler: expected content type: %s, got: %s", updateMeticsContentType, contentType)
+	// }
 
 	return nil
 }
