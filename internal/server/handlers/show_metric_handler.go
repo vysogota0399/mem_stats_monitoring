@@ -11,6 +11,8 @@ import (
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
 )
 
+const showMeticContentType string = "text/plain"
+
 type ShowMetricHandler struct {
 	logger            utils.Logger
 	gaugeRepository   repositories.Gauge
