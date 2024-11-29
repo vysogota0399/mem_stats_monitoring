@@ -1,33 +1,24 @@
 package server
 
 const (
-	defaultPort uint16 = 8080
-	defaultHost string = "localhost"
+	defaultAddress string = "localhost:8080"
 )
 
 type Config struct {
-	host string
-	port uint16
+	address string
 }
 
 type NewConfigOption func(*Config)
 
-func SetHost(host string) NewConfigOption {
+func SetAddress(a string) NewConfigOption {
 	return func(c *Config) {
-		c.host = host
-	}
-}
-
-func SetPort(port uint16) NewConfigOption {
-	return func(c *Config) {
-		c.port = port
+		c.address = a
 	}
 }
 
 func NewConfig(options ...NewConfigOption) Config {
 	config := Config{
-		host: defaultHost,
-		port: defaultPort,
+		address: defaultAddress,
 	}
 	for _, opt := range options {
 		opt(&config)

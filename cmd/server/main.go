@@ -1,15 +1,24 @@
 package main
 
 import (
+	"flag"
+
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server"
 )
 
 func main() {
+	parseFlags()
 	run()
 }
 
 func run() {
-	s, err := server.NewServer(server.NewConfig())
+	flag.Parse()
+
+	s, err := server.NewServer(
+		server.NewConfig(
+			server.SetAddress(flagRunAddr),
+		),
+	)
 	if err != nil {
 		panic(err)
 	}

@@ -15,7 +15,7 @@ func (c *mockClient) UpdateMetric(mType, mName, value string, requestID uuid.UUI
 	return nil
 }
 func TestPollIteration(t *testing.T) {
-	agent := NewAgent()
+	agent := NewAgent(NewConfig())
 	agent.httpClient = &mockClient{}
 
 	agent.memoryMetics = []MemMetric{
@@ -49,7 +49,7 @@ func TestPollIteration(t *testing.T) {
 }
 
 func TestReportIteration(t *testing.T) {
-	agent := NewAgent()
+	agent := NewAgent(NewConfig())
 	agent.httpClient = &mockClient{}
 	agent.memoryMetics = []MemMetric{}
 

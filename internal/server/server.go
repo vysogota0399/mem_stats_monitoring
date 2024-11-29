@@ -1,7 +1,6 @@
 package server
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -42,7 +41,7 @@ func (s *Server) Start() error {
 	s.router.POST("/update/:type/:name/:value", handlers.NewUpdateMetricHandler(s.storage, s.logger))
 	s.router.GET("/value/:type/:name", handlers.NewShowMetricHandler(s.storage, s.logger))
 	s.router.GET("/", handlers.NewRootHandler(s.storage, s.logger))
-	if err := http.ListenAndServe(s.address(), s.router); err != nil {
+	if err := http.ListenAndServe(s.config.address, s.router); err != nil {
 		return err
 	}
 
@@ -53,11 +52,4 @@ func SerLogger(logger utils.Logger) NewServerOption {
 	return func(s *Server) {
 		s.logger = logger
 	}
-}
-
-func (s Server) String() string {
-	return fmt.Sprintf("Host: %s\nPort: %d", s.config.host, s.config.port)
-}
-func (s *Server) address() string {
-	return fmt.Sprintf("%s:%d", s.config.host, s.config.port)
 }

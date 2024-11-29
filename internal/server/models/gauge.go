@@ -8,5 +8,5 @@ type Gauge struct {
 }
 
 func (g Gauge) StringValue() string {
-	return fmt.Sprintf("%.3f", g.Value)
+	return fmt.Sprintf("%v", g.Value)
 }

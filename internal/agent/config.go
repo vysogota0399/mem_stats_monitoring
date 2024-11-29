@@ -1,6 +1,9 @@
 package agent
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 const (
 	defaultReportInterval time.Duration = 2 * time.Second
@@ -17,16 +20,17 @@ type Config struct {
 type NewConfigOption func(*Config)
 
 func NewConfig(options ...NewConfigOption) Config {
-	config := Config{
+	c := Config{
 		PollInterval:   defaultPollInterval,
 		ReportInterval: defaultReportInterval,
 		ServerURL:      defaultServerURL,
 	}
 	for _, opt := range options {
-		opt(&config)
+		opt(&c)
 	}
 
-	return config
+	c.ServerURL = fmt.Sprintf("http://%s", c.ServerURL)
+	return c
 }
 
 func SetPollInterval(val time.Duration) NewConfigOption {

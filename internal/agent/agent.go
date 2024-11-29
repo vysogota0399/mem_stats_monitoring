@@ -25,8 +25,7 @@ type Agent struct {
 	customMetrics  []CustomMetric
 }
 
-func NewAgent() *Agent {
-	config := NewConfig()
+func NewAgent(config Config) *Agent {
 	return &Agent{
 		pollerLogger:   utils.InitLogger("[poller]"),
 		reporterLogger: utils.InitLogger("[reporter]"),
@@ -38,6 +37,7 @@ func NewAgent() *Agent {
 	}
 }
 func (a Agent) Start() {
+	fmt.Println(a.config)
 	wg := sync.WaitGroup{}
 	wg.Add(2)
 	a.startPoller(&wg)
