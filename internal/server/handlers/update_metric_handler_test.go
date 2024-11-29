@@ -33,14 +33,14 @@ func TestNewUpdateMetricHandler(t *testing.T) {
 			metricsUpdater: func(m Metric, storage storage.Storage, logger utils.Logger) error { return nil },
 			want:           want{statusCode: http.StatusOK},
 		},
-		{
-			name:           "when invalid headers got response status bad request",
-			url:            "/update/gauge/TotalAlloc/0",
-			method:         http.MethodPost,
-			headers:        map[string]string{},
-			metricsUpdater: func(m Metric, storage storage.Storage, logger utils.Logger) error { return nil },
-			want:           want{statusCode: http.StatusBadRequest},
-		},
+		// {
+		// 	name:           "when invalid headers got response status bad request",
+		// 	url:            "/update/gauge/TotalAlloc/0",
+		// 	method:         http.MethodPost,
+		// 	headers:        map[string]string{},
+		// 	metricsUpdater: func(m Metric, storage storage.Storage, logger utils.Logger) error { return nil },
+		// 	want:           want{statusCode: http.StatusBadRequest},
+		// },
 		{
 			name:           "when invalid method response got status not found",
 			url:            "/update/gauge/TotalAlloc/0",

@@ -13,7 +13,7 @@ import (
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
 )
 
-const updateMeticsContentType string = "text/plain"
+// const updateMeticsContentType string = "text/plain"
 
 type metricsUpdater func(m Metric, storage storage.Storage, logger utils.Logger) error
 
@@ -50,11 +50,11 @@ func (m Metric) String() string {
 
 func updateMetricHandlerFunc(h *UpdateMetricHandler) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if err := validateHeader(c.Request); err != nil {
-			h.logger.Println(err)
-			c.AbortWithStatus(http.StatusBadRequest)
-			return
-		}
+		// if err := validateHeader(c.Request); err != nil {
+		// 	h.logger.Println(err)
+		// 	c.AbortWithStatus(http.StatusBadRequest)
+		// 	return
+		// }
 
 		metric := Metric{
 			Name:  c.Param("name"),
@@ -69,14 +69,14 @@ func updateMetricHandlerFunc(h *UpdateMetricHandler) gin.HandlerFunc {
 	}
 }
 
-func validateHeader(r *http.Request) error {
-	contentType := r.Header.Get("Content-Type")
-	if contentType != updateMeticsContentType {
-		return fmt.Errorf("update_metric_handler: expected content type: %s, got: %s", updateMeticsContentType, contentType)
-	}
+// func validateHeader(r *http.Request) error {
+// 	contentType := r.Header.Get("Content-Type")
+// 	if contentType != updateMeticsContentType {
+// 		return fmt.Errorf("update_metric_handler: expected content type: %s, got: %s", updateMeticsContentType, contentType)
+// 	}
 
-	return nil
-}
+// 	return nil
+// }
 
 func updateMetrics(m Metric, storage storage.Storage, logger utils.Logger) error {
 	if m.Type != "gauge" && m.Type != "counter" {
@@ -104,7 +104,7 @@ func processGauge(m *Metric, storage storage.Storage, logger utils.Logger) error
 		return err
 	}
 
-	logger.Printf("New gauge: %v", g)
+	logger.Printf("Create gauge: %v", g)
 	rep := repositories.NewGauge(storage)
 	if _, err := rep.Craete(g); err != nil {
 		return err
@@ -119,7 +119,7 @@ func processCounter(m *Metric, storage storage.Storage, logger utils.Logger) err
 		return err
 	}
 
-	logger.Printf("New counter: %v", c)
+	logger.Printf("Create counter: %v", c)
 	rep := repositories.NewCounter(storage)
 	if _, err := rep.Craete(c); err != nil {
 		return err

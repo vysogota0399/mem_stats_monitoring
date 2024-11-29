@@ -37,7 +37,9 @@ func showMetricHandlerFunc(h *ShowMetricHandler) gin.HandlerFunc {
 			return
 		}
 
-		c.String(http.StatusOK, record.StringValue())
+		result := record.StringValue()
+		h.logger.Printf("Metric found: %s", result)
+		c.String(http.StatusOK, result)
 	}
 }
 

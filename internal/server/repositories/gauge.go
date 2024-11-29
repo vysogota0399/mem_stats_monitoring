@@ -16,7 +16,7 @@ type Gauge struct {
 func NewGauge(storage storage.Storage) Gauge {
 	return Gauge{
 		storage: storage,
-		mType:   "guage",
+		mType:   "gauge",
 		Records: make([]models.Gauge, 0),
 	}
 }
