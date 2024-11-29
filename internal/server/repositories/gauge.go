@@ -35,13 +35,13 @@ func (g Gauge) Last(mName string) (*models.Gauge, error) {
 		return nil, err
 	}
 
-	var gauge *models.Gauge
+	var gauge models.Gauge
 
-	if err := json.Unmarshal([]byte(record), gauge); err != nil {
+	if err := json.Unmarshal([]byte(record), &gauge); err != nil {
 		return nil, err
 	}
 
-	return gauge, nil
+	return &gauge, nil
 }
 
 func (g Gauge) All() map[string][]models.Gauge {
