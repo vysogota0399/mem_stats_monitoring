@@ -39,9 +39,10 @@ func NewServer(c Config, options ...NewServerOption) (*Server, error) {
 func (s *Server) Start() error {
 	// path, _ := os.Getwd()
 	// s.router.LoadHTMLGlob(fmt.Sprintf("%s/../../internal/server/templates/*.tmpl", path))
+	s.router.LoadHTMLGlob("templates/*.tmpl")
 	s.router.POST("/update/:type/:name/:value", handlers.NewUpdateMetricHandler(s.storage, s.logger))
 	s.router.GET("/value/:type/:name", handlers.NewShowMetricHandler(s.storage, s.logger))
-	// s.router.GET("/", handlers.NewRootHandler(s.storage, s.logger))
+	s.router.GET("/", handlers.NewRootHandler(s.storage, s.logger))
 	if err := http.ListenAndServe(s.address(), s.router); err != nil {
 		return err
 	}
