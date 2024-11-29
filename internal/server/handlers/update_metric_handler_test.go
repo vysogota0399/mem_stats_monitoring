@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
@@ -68,6 +69,16 @@ func TestNewUpdateMetricHandler(t *testing.T) {
 
 	for _, tt := range tasks {
 		t.Run(tt.name, func(t *testing.T) {
+			router := gin.Default()
+			handler := updateMetricHandlerFunc(
+				&UpdateMetricHandler{
+					logger:         utils.InitLogger("[test]"),
+					storage:        storage.New(),
+					metricsUpdater: tt.metricsUpdater,
+				},
+			)
+			router.POST("/update/:type/:name/:value", handler)
+
 			r, err := http.NewRequest(tt.method, tt.url, nil)
 			w := httptest.NewRecorder()
 			if err != nil {
@@ -78,8 +89,7 @@ func TestNewUpdateMetricHandler(t *testing.T) {
 				r.Header.Add(key, value)
 			}
 
-			subject := UpdateMetricHandler{logger: utils.InitLogger("[test]"), storage: nil, metricsUpdater: tt.metricsUpdater}
-			subject.ServeHTTP(w, r)
+			router.ServeHTTP(w, r)
 			response := w.Result()
 			assert.Equal(t, tt.want.statusCode, response.StatusCode, "%s %s \n%v", tt.method, tt.url, tt.headers)
 			response.Body.Close()

@@ -54,3 +54,25 @@ func (c Counter) Last(mName string) (*models.Counter, error) {
 
 	return &Counter, nil
 }
+
+func (c Counter) All() map[string][]models.Counter {
+	records := map[string][]models.Counter{}
+	mNames, ok := c.storage.All()[c.mType]
+	if !ok {
+		return records
+	}
+
+	for name, values := range mNames {
+		count := len(values)
+		collection := make([]models.Counter, count)
+		for i := 0; i < count; i++ {
+			collection[i] = models.Counter{}
+			if err := json.Unmarshal([]byte(values[i]), &collection[i]); err != nil {
+				continue
+			}
+		}
+		records[name] = collection
+	}
+
+	return records
+}

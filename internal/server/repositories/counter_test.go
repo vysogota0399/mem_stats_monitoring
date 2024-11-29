@@ -84,3 +84,50 @@ func TestLast(t *testing.T) {
 		})
 	}
 }
+
+func TestCounter_All(t *testing.T) {
+	type fields struct {
+		storage storage.Storage
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   map[string][]models.Counter
+	}{
+		{
+			name: "when storage has values then returns collection",
+			fields: fields{
+				storage: storage.NewMemStorageWithData(
+					map[string]map[string][]string{
+						"counter": {
+							"fiz": []string{`{"value": 0, "name": "fiz"}`},
+							"baz": []string{`{"value": 0, "name": "baz"}`},
+						},
+					},
+					utils.InitLogger("[test]"),
+				),
+			},
+			want: map[string][]models.Counter{
+				"fiz": {models.Counter{Name: "fiz", Value: 0}},
+				"baz": {models.Counter{Name: "baz", Value: 0}},
+			},
+		},
+		{
+			name: "when storage has no values then returns empty collection",
+			fields: fields{
+				storage: storage.NewMemStorageWithData(
+					map[string]map[string][]string{},
+					utils.InitLogger("[test]"),
+				),
+			},
+			want: map[string][]models.Counter{},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := NewCounter(tt.fields.storage)
+			actual := c.All()
+			assert.Equal(t, tt.want, actual)
+		})
+	}
+}

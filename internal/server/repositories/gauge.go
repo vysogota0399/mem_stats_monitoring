@@ -43,3 +43,25 @@ func (g Gauge) Last(mName string) (*models.Gauge, error) {
 
 	return gauge, nil
 }
+
+func (g Gauge) All() map[string][]models.Gauge {
+	records := map[string][]models.Gauge{}
+	mNames, ok := g.storage.All()[g.mType]
+	if !ok {
+		return records
+	}
+
+	for name, values := range mNames {
+		count := len(values)
+		collection := make([]models.Gauge, count)
+		for i := 0; i < count; i++ {
+			collection[i] = models.Gauge{}
+			if err := json.Unmarshal([]byte(values[i]), &collection[i]); err != nil {
+				continue
+			}
+		}
+		records[name] = collection
+	}
+
+	return records
+}

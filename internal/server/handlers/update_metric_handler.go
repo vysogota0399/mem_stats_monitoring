@@ -2,13 +2,11 @@ package handlers
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
-	"regexp"
 	"strconv"
-	"strings"
 
+	"github.com/gin-gonic/gin"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/repositories"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
@@ -25,12 +23,14 @@ type UpdateMetricHandler struct {
 	metricsUpdater metricsUpdater
 }
 
-func NewUpdateMetricHandler(storage storage.Storage, logger utils.Logger) *UpdateMetricHandler {
-	return &UpdateMetricHandler{
-		logger:         logger,
-		storage:        storage,
-		metricsUpdater: updateMetrics,
-	}
+func NewUpdateMetricHandler(storage storage.Storage, logger utils.Logger) gin.HandlerFunc {
+	return updateMetricHandlerFunc(
+		&UpdateMetricHandler{
+			logger:         logger,
+			storage:        storage,
+			metricsUpdater: updateMetrics,
+		},
+	)
 }
 
 type Metric struct {
@@ -48,53 +48,30 @@ func (m Metric) String() string {
 	return fmt.Sprintln(string(mJSON))
 }
 
-func (h UpdateMetricHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "", http.StatusNotFound)
-		return
+func updateMetricHandlerFunc(h *UpdateMetricHandler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if err := validateHeader(c.Request); err != nil {
+			h.logger.Println(err)
+			c.AbortWithStatus(http.StatusBadRequest)
+			return
+		}
+
+		metric := Metric{
+			Name:  c.Param("name"),
+			Type:  c.Param("type"),
+			Value: c.Param("value"),
+		}
+
+		if err := h.metricsUpdater(metric, h.storage, h.logger); err != nil {
+			h.logger.Printf("Update metric error\n%v", err)
+			c.AbortWithStatus(http.StatusBadRequest)
+		}
 	}
-
-	if err := validateHeader(r); err != nil {
-		h.logger.Println(err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	metric, err := parsePath(r.URL.Path)
-	if err != nil {
-		h.logger.Println(err)
-		http.Error(w, "", http.StatusNotFound)
-		return
-	}
-	h.logger.Printf("request params: %v", metric)
-
-	if err := h.metricsUpdater(metric, h.storage, h.logger); err != nil {
-		h.logger.Printf("Update metric error\n%v", err)
-		http.Error(w, "", http.StatusBadRequest)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-}
-
-func parsePath(path string) (Metric, error) {
-	pattern := regexp.MustCompile(`^/update/[a-zA-Z]+/[a-zA-Z]+/[a-zA-Z0-9]+$`)
-	if !pattern.MatchString(path) {
-		return Metric{}, errors.New("update_metric_handler: route not found")
-	}
-
-	params := strings.Split(path, "/")
-	params = params[len(params)-3:]
-	if len(params) != 3 {
-		return Metric{}, errors.New("update_metric_handler: route not found")
-	}
-
-	return Metric{Type: params[0], Name: params[1], Value: params[2]}, nil
 }
 
 func validateHeader(r *http.Request) error {
 	contentType := r.Header.Get("Content-Type")
-	if contentType != "text/plain" {
+	if contentType != updateMeticsContentType {
 		return fmt.Errorf("update_metric_handler: expected content type: %s, got: %s", updateMeticsContentType, contentType)
 	}
 

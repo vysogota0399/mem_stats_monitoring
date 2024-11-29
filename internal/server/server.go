@@ -3,7 +3,7 @@ package server
 import (
 	"fmt"
 	"net/http"
-
+	"github.com/gin-gonic/gin"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/handlers"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
@@ -11,7 +11,7 @@ import (
 
 type Server struct {
 	config  Config
-	mux     *http.ServeMux
+	router  *gin.Engine
 	logger  utils.Logger
 	storage storage.Storage
 }
@@ -21,7 +21,7 @@ type NewServerOption func(*Server)
 func NewServer(c Config, options ...NewServerOption) (*Server, error) {
 	s := Server{
 		config: c,
-		mux:    http.NewServeMux(),
+		router: gin.Default(),
 	}
 
 	for _, opt := range options {
@@ -37,10 +37,12 @@ func NewServer(c Config, options ...NewServerOption) (*Server, error) {
 }
 
 func (s *Server) Start() error {
-	s.logger.Printf("Start\n%v", s)
-	s.mux.Handle(`/update/`, Conveyor(handlers.NewUpdateMetricHandler(s.storage, s.logger), RequestLogger))
-
-	if err := http.ListenAndServe(s.address(), s.mux); err != nil {
+	// path, _ := os.Getwd()
+	// s.router.LoadHTMLGlob(fmt.Sprintf("%s/../../internal/server/templates/*.tmpl", path))
+	s.router.POST("/update/:type/:name/:value", handlers.NewUpdateMetricHandler(s.storage, s.logger))
+	s.router.GET("/value/:type/:name", handlers.NewShowMetricHandler(s.storage, s.logger))
+	// s.router.GET("/", handlers.NewRootHandler(s.storage, s.logger))
+	if err := http.ListenAndServe(s.address(), s.router); err != nil {
 		return err
 	}
 

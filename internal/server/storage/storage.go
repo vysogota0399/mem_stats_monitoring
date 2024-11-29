@@ -11,6 +11,7 @@ import (
 type Storage interface {
 	Last(mType, mName string) (string, error)
 	Push(mType, mName string, val any) error
+	All() map[string]map[string][]string
 }
 
 var ErrNoRecords = errors.New("memory: no records error")
@@ -80,7 +81,7 @@ func (m *Memory) Push(mType, mName string, val any) error {
 }
 
 func (m *Memory) Last(mType, mName string) (string, error) {
-	mTypeStorage, ok := m.storage[mType]
+	mTypeStorage, ok := m.All()[mType]
 	if !ok {
 		m.logger.Printf("Got type: %v, name: %v\nResult: type not found", mType, mName)
 		return "", ErrNoRecords
@@ -99,5 +100,22 @@ func (m *Memory) Last(mType, mName string) (string, error) {
 
 	result := valuesStorage[len(valuesStorage)-1]
 	m.logger.Printf("Got type: %v, name: %v\nResult: %v", mType, mName, result)
-	return valuesStorage[len(valuesStorage)-1], nil
+	return result, nil
+}
+
+func (m *Memory) All() map[string]map[string][]string {
+	dist := map[string]map[string][]string{}
+	for mType, mNames := range m.storage {
+		dist[mType] = map[string][]string{}
+		for mName, values := range mNames {
+			lenValues := len(values)
+			newValues := make([]string, lenValues)
+			dist[mType][mName] = newValues
+			for i := 0; i < lenValues; i++ {
+				newValues[i] = values[i]
+			}
+		}
+	}
+
+	return dist
 }
