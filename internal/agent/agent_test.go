@@ -3,10 +3,12 @@ package agent
 import (
 	"runtime"
 	"testing"
+	"time"
 
 	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/models"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/storage"
 )
 
 type mockClient struct{}
@@ -15,7 +17,14 @@ func (c *mockClient) UpdateMetric(mType, mName, value string, requestID uuid.UUI
 	return nil
 }
 func TestPollIteration(t *testing.T) {
-	agent := NewAgent(NewConfig())
+	agent := NewAgent(
+		NewConfig(
+			10*time.Second,
+			2*time.Second,
+			"http://test.com",
+		),
+		storage.NewMemoryStorage(),
+	)
 	agent.httpClient = &mockClient{}
 
 	agent.memoryMetics = []MemMetric{
@@ -49,7 +58,14 @@ func TestPollIteration(t *testing.T) {
 }
 
 func TestReportIteration(t *testing.T) {
-	agent := NewAgent(NewConfig())
+	agent := NewAgent(
+		NewConfig(
+			10*time.Second,
+			2*time.Second,
+			"http://test.com",
+		),
+		storage.NewMemoryStorage(),
+	)
 	agent.httpClient = &mockClient{}
 	agent.memoryMetics = []MemMetric{}
 

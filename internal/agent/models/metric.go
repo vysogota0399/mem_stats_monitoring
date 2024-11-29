@@ -1,6 +1,9 @@
 package models
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"log"
+)
 
 type Metric struct {
 	Name  string `json:"name"`
@@ -11,7 +14,8 @@ type Metric struct {
 func (m Metric) String() string {
 	record, err := json.Marshal(m)
 	if err != nil {
-		return err.Error()
+		log.Println("models/mitric: marshal err %w", err)
+		return ""
 	}
 
 	return string(record)

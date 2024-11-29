@@ -2,8 +2,10 @@ package main
 
 import (
 	"flag"
+	"log"
 
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
 )
 
 func main() {
@@ -14,13 +16,10 @@ func main() {
 func run() {
 	flag.Parse()
 
-	s, err := server.NewServer(
-		server.NewConfig(
-			server.SetAddress(flagRunAddr),
-		),
-	)
+	config := server.NewConfig(flagRunAddr)
+	s, err := server.NewServer(config, storage.New())
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
 	if err := s.Start(); err != nil {

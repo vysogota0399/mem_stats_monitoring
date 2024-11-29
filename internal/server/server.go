@@ -18,38 +18,29 @@ type Server struct {
 
 type NewServerOption func(*Server)
 
-func NewServer(c Config, options ...NewServerOption) (*Server, error) {
+func NewServer(c Config, storage storage.Storage) (*Server, error) {
 	s := Server{
 		config: c,
 		router: gin.Default(),
-	}
-
-	for _, opt := range options {
-		opt(&s)
 	}
 
 	if s.logger == nil {
 		s.logger = utils.InitLogger("[server]")
 	}
 
-	s.storage = storage.New()
+	s.storage = storage
 	return &s, nil
 }
 
 func (s *Server) Start() error {
+	s.logger.Println(s.config)
 	s.router.LoadHTMLGlob("internal/server/templates/*.tmpl")
 	s.router.POST("/update/:type/:name/:value", handlers.NewUpdateMetricHandler(s.storage, s.logger))
 	s.router.GET("/value/:type/:name", handlers.NewShowMetricHandler(s.storage, s.logger))
 	s.router.GET("/", handlers.NewRootHandler(s.storage, s.logger))
-	if err := http.ListenAndServe(s.config.address, s.router); err != nil {
+	if err := http.ListenAndServe(s.config.Address, s.router); err != nil {
 		return err
 	}
 
 	return nil
-}
-
-func SerLogger(logger utils.Logger) NewServerOption {
-	return func(s *Server) {
-		s.logger = logger
-	}
 }

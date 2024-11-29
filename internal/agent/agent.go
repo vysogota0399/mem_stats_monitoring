@@ -16,28 +16,26 @@ type httpClient interface {
 }
 
 type Agent struct {
-	pollerLogger   utils.Logger
-	reporterLogger utils.Logger
-	storage        storage.Storage
-	config         Config
-	httpClient     httpClient
-	memoryMetics   []MemMetric
-	customMetrics  []CustomMetric
+	logger        utils.Logger
+	storage       storage.Storage
+	config        Config
+	httpClient    httpClient
+	memoryMetics  []MemMetric
+	customMetrics []CustomMetric
 }
 
-func NewAgent(config Config) *Agent {
+func NewAgent(config Config, store storage.Storage) *Agent {
 	return &Agent{
-		pollerLogger:   utils.InitLogger("[poller]"),
-		reporterLogger: utils.InitLogger("[reporter]"),
-		storage:        storage.NewMemoryStorage(),
-		config:         config,
-		httpClient:     clients.NewMemStatsServer(config.ServerURL),
-		memoryMetics:   memMetricsDefinition,
-		customMetrics:  customMetricsDefinition,
+		logger:        utils.InitLogger("[agent]"),
+		storage:       store,
+		config:        config,
+		httpClient:    clients.NewReporter(config.ServerURL),
+		memoryMetics:  memMetricsDefinition,
+		customMetrics: customMetricsDefinition,
 	}
 }
 func (a Agent) Start() {
-	fmt.Println(a.config)
+	a.logger.Println(a.config)
 	wg := sync.WaitGroup{}
 	wg.Add(2)
 	a.startPoller(&wg)
@@ -51,7 +49,7 @@ func (a *Agent) startPoller(wg *sync.WaitGroup) {
 
 		for {
 			a.PollIteration()
-			a.pollerLogger.Printf("Sleep %v", a.config.PollInterval)
+			a.logger.Printf("[poller] Sleep %v", a.config.PollInterval)
 			time.Sleep(a.config.PollInterval)
 		}
 	}()
@@ -63,7 +61,7 @@ func (a Agent) startReporter(wg *sync.WaitGroup) {
 
 		for {
 			a.ReportIteration()
-			a.reporterLogger.Printf("Sleep %v", a.config.ReportInterval)
+			a.logger.Printf("[reporter]Sleep %v", a.config.ReportInterval)
 			time.Sleep(a.config.ReportInterval)
 		}
 	}()
@@ -71,21 +69,21 @@ func (a Agent) startReporter(wg *sync.WaitGroup) {
 
 func (a *Agent) PollIteration() {
 	operationID := uuid.NewV4()
-	a.pollerLogger.Printf("[%v] OPERATION START", operationID)
+	a.logger.Printf("[poller][%v] OPERATION START", operationID)
 	a.processMemMetrics(operationID)
 	a.processCustomMetrics(operationID)
-	a.pollerLogger.Printf("[%v] OPERATION FINISHED", operationID)
+	a.logger.Printf("[poller][%v] OPERATION FINISHED", operationID)
 }
 
 func (a Agent) ReportIteration() int {
 	var counter int
 	operationID := uuid.NewV4()
-	a.reporterLogger.Printf("[%v] OPERATION START", operationID)
+	a.logger.Printf("[reporter][%v] OPERATION START", operationID)
 
 	for _, m := range a.memoryMetics {
 		count, err := a.doReport(m, operationID)
 		if err != nil {
-			a.reporterLogger.Println(err)
+			a.logger.Printf("[reporter] err: %w", err)
 			continue
 		}
 
@@ -95,14 +93,14 @@ func (a Agent) ReportIteration() int {
 	for _, m := range a.customMetrics {
 		count, err := a.doReport(m, operationID)
 		if err != nil {
-			a.reporterLogger.Println(err)
+			a.logger.Printf("[reporter] err: %w", err)
 			continue
 		}
 
 		counter += count
 	}
 
-	a.reporterLogger.Printf("[%v] OPERATION FINISHED", operationID)
+	a.logger.Printf("[reporter][%v] OPERATION FINISHED", operationID)
 	return counter
 }
 
@@ -128,6 +126,6 @@ func convertToStr(val any) (string, error) {
 	case float64:
 		return fmt.Sprintf("%.2f", val2), nil
 	default:
-		return "", fmt.Errorf("agent: value %v underfined type - %t error", val, val)
+		return "", fmt.Errorf("internal/agent: value %v underfined type - %t error", val, val)
 	}
 }

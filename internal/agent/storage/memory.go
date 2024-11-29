@@ -2,6 +2,7 @@ package storage
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/models"
@@ -49,14 +50,12 @@ func (s *Memory) Set(m *models.Metric) error {
 func (s *Memory) Get(mType, mName string) (*models.Metric, error) {
 	mTypeStorage, ok := s.storage[mType]
 	if !ok {
-		s.logger.Printf("Got type: %v, name: %v, result: type not found", mType, mName)
-		return nil, ErrNoRecords
+		return nil, fmt.Errorf("storage/memory: Got type: %v, name: %v - type %w", mType, mName, ErrNoRecords)
 	}
 
 	val, ok := mTypeStorage[mName]
 	if !ok {
-		s.logger.Printf("Got type: %v, name: %v\nResult: value not found", mType, mName)
-		return nil, ErrNoRecords
+		return nil, fmt.Errorf("storage/memory: Got type: %v, name: %v - value %w", mType, mName, ErrNoRecords)
 	}
 
 	return &models.Metric{Name: mName, Type: mType, Value: val}, nil

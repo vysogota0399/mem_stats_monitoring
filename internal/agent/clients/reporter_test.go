@@ -17,19 +17,19 @@ func (f RoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req), nil
 }
 
-func NewTestClient(fn RoundTripFunc) *MemStatsServer {
+func NewTestClient(fn RoundTripFunc) *Reporter {
 	testClient := &http.Client{
 		Transport: RoundTripFunc(fn),
 	}
 
-	return &MemStatsServer{
+	return &Reporter{
 		address: "http://0.0.0.0:8080",
 		client:  testClient,
 		logger:  utils.InitLogger("[test]"),
 	}
 }
 
-func TestNewMemStatsServer(t *testing.T) {
+func TestNewReporter(t *testing.T) {
 	tasks := []struct {
 		name       string
 		err        error

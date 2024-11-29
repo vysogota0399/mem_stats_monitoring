@@ -59,7 +59,7 @@ func TestGet(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			storage := NewMemoryStorageWithData(tt.data, utils.InitLogger("[test]"))
 			val, err := storage.Get(tt.mType, tt.mName)
-			assert.ErrorIs(t, tt.wantError, err)
+			assert.ErrorIs(t, err, tt.wantError)
 			assert.Equal(t, tt.wantRecord, val)
 		})
 	}

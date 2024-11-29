@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"errors"
 	"fmt"
 	"math/rand"
 	"runtime"
@@ -155,7 +156,7 @@ var customMetricsDefinition = []CustomMetric{
 		generateValue: func(mName, mType string, a *Agent) (uint64, error) {
 			var val uint64
 			last, err := a.storage.Get(mType, mName)
-			if err != nil && err != storage.ErrNoRecords {
+			if err != nil && !errors.Is(err, storage.ErrNoRecords) {
 				return val, err
 			}
 
@@ -186,7 +187,7 @@ func (a *Agent) processMemMetrics(operationID uuid.UUID) {
 	for _, m := range a.memoryMetics {
 		val, err := convertToStr(m.generateValue(&memStat))
 		if err != nil {
-			a.pollerLogger.Printf("[%v] %v", operationID, err)
+			a.logger.Printf("[poller][%v] %v", operationID, err)
 			continue
 		}
 		record := models.Metric{
@@ -195,9 +196,9 @@ func (a *Agent) processMemMetrics(operationID uuid.UUID) {
 			Value: val,
 		}
 
-		a.pollerLogger.Printf("[%v] New value %s", operationID, record)
+		a.logger.Printf("[poller][%v] New value %s", operationID, record)
 		if err = a.storage.Set(&record); err != nil {
-			a.pollerLogger.Printf("[%v] save value to storage error\berror:%wvalue: %s", operationID, err, record)
+			a.logger.Printf("[poller][%v] save value to storage error:%wvalue: %s", operationID, err, record)
 			continue
 		}
 	}
@@ -207,7 +208,7 @@ func (a *Agent) processCustomMetrics(operationID uuid.UUID) {
 	for _, m := range a.customMetrics {
 		val, err := m.generateValue(m.Name, m.Type, a)
 		if err != nil {
-			a.pollerLogger.Printf("[%v] generate value error\berror:%w", operationID, err)
+			a.logger.Printf("[poller][%v] generate value error:%w", operationID, err)
 			continue
 		}
 
@@ -217,9 +218,9 @@ func (a *Agent) processCustomMetrics(operationID uuid.UUID) {
 			Value: fmt.Sprintf("%v", val),
 		}
 
-		a.pollerLogger.Printf("[%v] New value %s", operationID, record)
+		a.logger.Printf("[poller][%v] New value %s", operationID, record)
 		if err = a.storage.Set(&record); err != nil {
-			a.pollerLogger.Printf("[%v] save value to storage error\berror:%wvalue: %s", operationID, err, record)
+			a.logger.Printf("[poller][%v] save value to storage error:%wvalue: %s", operationID, err, record)
 			continue
 		}
 	}

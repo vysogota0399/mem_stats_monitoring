@@ -12,24 +12,23 @@ import (
 
 var ErrUnsuccessfulResponse error = errors.New("mem_stats_server: response not success")
 
-type MemStatsServer struct {
+type Reporter struct {
 	client  *http.Client
 	address string
 	logger  utils.Logger
 }
 
-func NewMemStatsServer(address string) *MemStatsServer {
-	return &MemStatsServer{address: address, client: &http.Client{}, logger: utils.InitLogger("[http]")}
+func NewReporter(address string) *Reporter {
+	return &Reporter{address: address, client: &http.Client{}, logger: utils.InitLogger("[http]")}
 }
 
-func (c *MemStatsServer) UpdateMetric(mType, mName, value string, requestID uuid.UUID) error {
+func (c *Reporter) UpdateMetric(mType, mName, value string, requestID uuid.UUID) error {
 	req, err := http.NewRequest(
 		"POST", fmt.Sprintf("%s/update/%s/%s/%v", c.address, mType, mName, value), nil,
 	)
 
 	if err != nil {
-		c.logger.Printf("[%v] mem_stats_server.go: %v", requestID, err)
-		return err
+		return fmt.Errorf("internal/agent/clients/reporter: create request err: %w", err)
 	}
 
 	req.Header.Add("Content-Type", "text/plain")
@@ -37,8 +36,7 @@ func (c *MemStatsServer) UpdateMetric(mType, mName, value string, requestID uuid
 	resp, err := c.requestDo(req, requestID)
 
 	if err != nil {
-		c.logger.Printf("[%v] mem_stats_server: do request error: %v", requestID, err)
-		return err
+		return fmt.Errorf("internal/agent/clients/reporter: send request err: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -50,7 +48,7 @@ func (c *MemStatsServer) UpdateMetric(mType, mName, value string, requestID uuid
 	return nil
 }
 
-func (c *MemStatsServer) requestDo(req *http.Request, requestID uuid.UUID) (*http.Response, error) {
+func (c *Reporter) requestDo(req *http.Request, requestID uuid.UUID) (*http.Response, error) {
 	start := time.Now()
 	c.logger.Printf("[%s] REQUEST BEGIN", requestID)
 	c.logger.Printf("[%s] %s %s", requestID, req.Method, req.URL)

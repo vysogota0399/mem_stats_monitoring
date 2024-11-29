@@ -1,28 +1,27 @@
 package server
 
-const (
-	defaultAddress string = "localhost:8080"
+import (
+	"fmt"
+
+	"github.com/caarlos0/env"
 )
 
 type Config struct {
-	address string
+	Address string `env:"ADDRESS"`
 }
 
-type NewConfigOption func(*Config)
-
-func SetAddress(a string) NewConfigOption {
-	return func(c *Config) {
-		c.address = a
-	}
+func (c *Config) String() string {
+	return fmt.Sprintf("Address: %s", c.Address)
 }
 
-func NewConfig(options ...NewConfigOption) Config {
-	config := Config{
-		address: defaultAddress,
-	}
-	for _, opt := range options {
-		opt(&config)
+func NewConfig(address string) Config {
+	c := Config{
+		Address: address,
 	}
 
-	return config
+	if err := env.Parse(&c); err != nil {
+		panic(err)
+	}
+
+	return c
 }
