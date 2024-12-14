@@ -55,7 +55,7 @@ func (c Counter) Last(mName string) (*models.Counter, error) {
 	return &Counter, nil
 }
 
-func (c Counter) All() map[string][]models.Counter {
+func (c Counter) All() map[string][]models.Counter { //nolint:dupl // :/
 	records := map[string][]models.Counter{}
 	mNames, ok := c.storage.All()[c.mType]
 	if !ok {

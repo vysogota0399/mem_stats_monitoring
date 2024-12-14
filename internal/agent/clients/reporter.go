@@ -1,6 +1,7 @@
 package clients
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -23,8 +24,10 @@ func NewReporter(address string) *Reporter {
 }
 
 func (c *Reporter) UpdateMetric(mType, mName, value string, requestID uuid.UUID) error {
-	req, err := http.NewRequest(
-		"POST", fmt.Sprintf("%s/update/%s/%s/%v", c.address, mType, mName, value), nil,
+	req, err := http.NewRequestWithContext(
+		context.TODO(),
+		"POST", fmt.Sprintf("%s/update/%s/%s/%v", c.address, mType, mName, value),
+		http.NoBody,
 	)
 
 	if err != nil {

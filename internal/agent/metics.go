@@ -1,9 +1,10 @@
 package agent
 
 import (
+	"crypto/rand"
 	"errors"
 	"fmt"
-	"math/rand"
+	"math/big"
 	"runtime"
 	"strconv"
 
@@ -176,7 +177,13 @@ var customMetricsDefinition = []CustomMetric{
 		Name: "RandomValue",
 		Type: "gauge",
 		generateValue: func(mName, mType string, a *Agent) (uint64, error) {
-			return rand.Uint64(), nil
+			const max int64 = 100
+			val, err := rand.Int(rand.Reader, big.NewInt(max))
+			if err != nil {
+				return 0, err
+			}
+
+			return val.Uint64(), nil
 		},
 	},
 }

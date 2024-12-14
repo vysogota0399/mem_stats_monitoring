@@ -11,6 +11,9 @@ import (
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
 )
 
+const gauge string = "gauge"
+const counter string = "counter"
+
 type ShowMetricHandler struct {
 	logger            utils.Logger
 	gaugeRepository   repositories.Gauge
@@ -45,9 +48,9 @@ func showMetricHandlerFunc(h *ShowMetricHandler) gin.HandlerFunc {
 
 func (h *ShowMetricHandler) fetchMetic(mType, mName string) (models.Metricable, error) {
 	switch mType {
-	case "gauge":
+	case gauge:
 		return h.gaugeRepository.Last(mName)
-	case "counter":
+	case counter:
 		return h.counterRepository.Last(mName)
 	}
 	return nil, fmt.Errorf("show_metric_handler: fatch mType: %s, mName: %s error", mType, mName)

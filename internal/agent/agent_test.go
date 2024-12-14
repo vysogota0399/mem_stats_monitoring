@@ -54,7 +54,6 @@ func TestPollIteration(t *testing.T) {
 	randomValue, err := agent.storage.Get("gauge", "RandomValue")
 	assert.NoError(t, err)
 	assert.NotNil(t, randomValue.Value)
-
 }
 
 func TestReportIteration(t *testing.T) {

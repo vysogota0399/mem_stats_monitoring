@@ -50,12 +50,6 @@ func (m Metric) String() string {
 
 func updateMetricHandlerFunc(h *UpdateMetricHandler) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// if err := validateHeader(c.Request); err != nil {
-		// 	h.logger.Println(err)
-		// 	c.AbortWithStatus(http.StatusBadRequest)
-		// 	return
-		// }
-
 		metric := Metric{
 			Name:  c.Param("name"),
 			Type:  c.Param("type"),

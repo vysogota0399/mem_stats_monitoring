@@ -2,6 +2,7 @@ package server
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/handlers"
@@ -38,7 +39,14 @@ func (s *Server) Start() error {
 	s.router.POST("/update/:type/:name/:value", handlers.NewUpdateMetricHandler(s.storage, s.logger))
 	s.router.GET("/value/:type/:name", handlers.NewShowMetricHandler(s.storage, s.logger))
 	s.router.GET("/", handlers.NewRootHandler(s.storage, s.logger))
-	if err := http.ListenAndServe(s.config.Address, s.router); err != nil {
+
+	server := &http.Server{
+		Addr:              s.config.Address,
+		ReadHeaderTimeout: 10 * time.Second,
+		Handler:           s.router,
+	}
+
+	if err := server.ListenAndServe(); err != nil {
 		return err
 	}
 

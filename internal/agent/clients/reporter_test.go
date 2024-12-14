@@ -19,7 +19,7 @@ func (f RoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 
 func NewTestClient(fn RoundTripFunc) *Reporter {
 	testClient := &http.Client{
-		Transport: RoundTripFunc(fn),
+		Transport: fn,
 	}
 
 	return &Reporter{

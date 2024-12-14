@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -34,7 +35,7 @@ func TestNewRootHandler(t *testing.T) {
 			handler := NewRootHandler(tt.args.storage, utils.InitLogger("[test]"))
 			router.GET("/", handler)
 
-			r, err := http.NewRequest("GET", "/", nil)
+			r, err := http.NewRequestWithContext(context.TODO(), "GET", "/", nil)
 			assert.NoError(t, err)
 
 			w := httptest.NewRecorder()

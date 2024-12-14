@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -70,7 +71,7 @@ func TestNewShowMetricHandler(t *testing.T) {
 			handler := NewShowMetricHandler(tt.args.storage, utils.InitLogger("[test]"))
 			router.GET("/value/:type/:name", handler)
 
-			r, err := http.NewRequest("GET", fmt.Sprintf("/value/%s/%s", tt.args.mType, tt.args.mName), nil)
+			r, err := http.NewRequestWithContext(context.TODO(), "GET", fmt.Sprintf("/value/%s/%s", tt.args.mType, tt.args.mName), nil)
 			assert.NoError(t, err)
 
 			w := httptest.NewRecorder()

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -71,7 +72,7 @@ func TestNewUpdateMetricHandler(t *testing.T) {
 			)
 			router.POST("/update/:type/:name/:value", handler)
 
-			r, err := http.NewRequest(tt.method, tt.url, nil)
+			r, err := http.NewRequestWithContext(context.TODO(), tt.method, tt.url, nil)
 			w := httptest.NewRecorder()
 			if err != nil {
 				t.Error(err)

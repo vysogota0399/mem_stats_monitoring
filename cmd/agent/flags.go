@@ -4,6 +4,11 @@ import (
 	"flag"
 )
 
+const (
+	defaultReportIntercal = 10
+	defaultPollInterval   = 2
+)
+
 var (
 	flagServerAddr     string
 	flagReportInterval int64
@@ -12,8 +17,8 @@ var (
 
 func parseFlags() {
 	flag.StringVar(&flagServerAddr, "a", "localhost:8080", "address and port to run server")
-	flag.Int64Var(&flagReportInterval, "r", 10, "Report interval")
-	flag.Int64Var(&flagPollInterval, "p", 2, "Poll interval")
+	flag.Int64Var(&flagReportInterval, "r", defaultReportIntercal, "Report interval")
+	flag.Int64Var(&flagPollInterval, "p", defaultPollInterval, "Poll interval")
 
 	flag.Parse()
 }

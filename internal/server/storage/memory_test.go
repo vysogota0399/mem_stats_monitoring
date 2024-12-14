@@ -87,7 +87,8 @@ func TestPush(t *testing.T) {
 	for _, tt := range tasks {
 		t.Run(tt.name, func(t *testing.T) {
 			storage := NewMemStorageWithData(tt.data, utils.InitLogger("[test]"))
-			storage.Push("counter", tt.val.Name, tt.val)
+			err := storage.Push("counter", tt.val.Name, tt.val)
+			assert.NoError(t, err)
 
 			expectedVal, err := json.Marshal(tt.val)
 			assert.NoError(t, err)

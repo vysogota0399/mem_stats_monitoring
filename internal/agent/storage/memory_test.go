@@ -86,7 +86,7 @@ func TestSet(t *testing.T) {
 	for _, tt := range tasks {
 		t.Run(tt.name, func(t *testing.T) {
 			storage := NewMemoryStorageWithData(tt.data, utils.InitLogger("[test]"))
-			storage.Set(&tt.val)
+			assert.NoError(t, storage.Set(&tt.val))
 
 			actualValue := tt.data[tt.val.Type][tt.val.Name]
 			assert.Equal(t, tt.val.Value, actualValue)

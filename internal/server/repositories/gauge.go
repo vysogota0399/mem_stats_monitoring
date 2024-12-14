@@ -44,7 +44,7 @@ func (g Gauge) Last(mName string) (*models.Gauge, error) {
 	return &gauge, nil
 }
 
-func (g Gauge) All() map[string][]models.Gauge {
+func (g Gauge) All() map[string][]models.Gauge { //nolint:dupl // :/
 	records := map[string][]models.Gauge{}
 	mNames, ok := g.storage.All()[g.mType]
 	if !ok {
