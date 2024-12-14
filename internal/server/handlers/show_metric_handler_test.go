@@ -10,7 +10,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
-	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
 )
 
 func TestNewShowMetricHandler(t *testing.T) {
@@ -35,7 +34,7 @@ func TestNewShowMetricHandler(t *testing.T) {
 				statusCode: http.StatusOK,
 			},
 			args: args{
-				storage: storage.NewMemStorageWithData(map[string]map[string][]string{"counter": {"test": []string{`{"value": 1, "name": "test"}`}}}, utils.InitLogger("test")),
+				storage: storage.NewMemStorageWithData(map[string]map[string][]string{"counter": {"test": []string{`{"value": 1, "name": "test"}`}}}),
 				mName:   "test",
 				mType:   "counter",
 			},
@@ -47,7 +46,7 @@ func TestNewShowMetricHandler(t *testing.T) {
 				statusCode: http.StatusNotFound,
 			},
 			args: args{
-				storage: storage.NewMemStorageWithData(map[string]map[string][]string{"counter": {"test": []string{`{"value": 1, "name": "test"}`}}}, utils.InitLogger("test")),
+				storage: storage.NewMemStorageWithData(map[string]map[string][]string{"counter": {"test": []string{`{"value": 1, "name": "test"}`}}}),
 				mName:   "test",
 				mType:   "hist",
 			},
@@ -59,7 +58,7 @@ func TestNewShowMetricHandler(t *testing.T) {
 				statusCode: http.StatusNotFound,
 			},
 			args: args{
-				storage: storage.NewMemStorageWithData(map[string]map[string][]string{"counter": {"test": []string{`{"value": 1, "name": "test"}`}}}, utils.InitLogger("test")),
+				storage: storage.NewMemStorageWithData(map[string]map[string][]string{"counter": {"test": []string{`{"value": 1, "name": "test"}`}}}),
 				mName:   "unexpectedName",
 				mType:   "counter",
 			},
@@ -68,7 +67,7 @@ func TestNewShowMetricHandler(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			router := gin.Default()
-			handler := NewShowMetricHandler(tt.args.storage, utils.InitLogger("[test]"))
+			handler := NewShowMetricHandler(tt.args.storage)
 			router.GET("/value/:type/:name", handler)
 
 			r, err := http.NewRequestWithContext(context.TODO(), "GET", fmt.Sprintf("/value/%s/%s", tt.args.mType, tt.args.mName), nil)

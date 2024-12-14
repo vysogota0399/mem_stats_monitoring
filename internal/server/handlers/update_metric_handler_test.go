@@ -10,7 +10,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
-	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
 )
 
 func TestNewUpdateMetricHandler(t *testing.T) {
@@ -31,7 +30,7 @@ func TestNewUpdateMetricHandler(t *testing.T) {
 			url:            "/update/gauge/TotalAlloc/0",
 			method:         http.MethodPost,
 			headers:        map[string]string{"Content-Type": "text/plain"},
-			metricsUpdater: func(m Metric, storage storage.Storage, logger utils.Logger) error { return nil },
+			metricsUpdater: func(m Metric, storage storage.Storage) error { return nil },
 			want:           want{statusCode: http.StatusOK},
 		},
 		{
@@ -39,7 +38,7 @@ func TestNewUpdateMetricHandler(t *testing.T) {
 			url:            "/update/gauge/TotalAlloc/0",
 			method:         http.MethodGet,
 			headers:        map[string]string{"Content-Type": "text/plain"},
-			metricsUpdater: func(m Metric, storage storage.Storage, logger utils.Logger) error { return nil },
+			metricsUpdater: func(m Metric, storage storage.Storage) error { return nil },
 			want:           want{statusCode: http.StatusNotFound},
 		},
 		{
@@ -47,7 +46,7 @@ func TestNewUpdateMetricHandler(t *testing.T) {
 			url:            "/update/0",
 			method:         http.MethodGet,
 			headers:        map[string]string{"Content-Type": "text/plain"},
-			metricsUpdater: func(m Metric, storage storage.Storage, logger utils.Logger) error { return nil },
+			metricsUpdater: func(m Metric, storage storage.Storage) error { return nil },
 			want:           want{statusCode: http.StatusNotFound},
 		},
 		{
@@ -55,7 +54,7 @@ func TestNewUpdateMetricHandler(t *testing.T) {
 			url:            "/update/hist/TotalAlloc/0",
 			method:         http.MethodPost,
 			headers:        map[string]string{"Content-Type": "text/plain"},
-			metricsUpdater: func(m Metric, storage storage.Storage, logger utils.Logger) error { return errors.New("error") },
+			metricsUpdater: func(m Metric, storage storage.Storage) error { return errors.New("error") },
 			want:           want{statusCode: http.StatusBadRequest},
 		},
 	}
@@ -65,7 +64,6 @@ func TestNewUpdateMetricHandler(t *testing.T) {
 			router := gin.Default()
 			handler := updateMetricHandlerFunc(
 				&UpdateMetricHandler{
-					logger:         utils.InitLogger("[test]"),
 					storage:        storage.New(),
 					metricsUpdater: tt.metricsUpdater,
 				},

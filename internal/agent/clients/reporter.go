@@ -35,6 +35,7 @@ func (c *Reporter) UpdateMetric(mType, mName, value string, requestID uuid.UUID)
 	}
 
 	req.Header.Add("Content-Type", "text/plain")
+	req.Header.Add("X-Request-ID", requestID.String())
 
 	resp, err := c.requestDo(req, requestID)
 

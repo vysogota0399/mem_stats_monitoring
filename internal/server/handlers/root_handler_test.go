@@ -9,7 +9,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
-	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
 )
 
 func TestNewRootHandler(t *testing.T) {
@@ -32,7 +31,7 @@ func TestNewRootHandler(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			router := gin.Default()
 			router.LoadHTMLGlob("../templates/*.tmpl")
-			handler := NewRootHandler(tt.args.storage, utils.InitLogger("[test]"))
+			handler := NewRootHandler(tt.args.storage)
 			router.GET("/", handler)
 
 			r, err := http.NewRequestWithContext(context.TODO(), "GET", "/", nil)

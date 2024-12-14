@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
-	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
 )
 
 func TestCreate(t *testing.T) {
@@ -22,7 +21,6 @@ func TestCreate(t *testing.T) {
 			name:        "when storage empty create then record to state",
 			storage: storage.NewMemStorageWithData(
 				map[string]map[string][]string{},
-				utils.InitLogger("[test]"),
 			),
 		},
 		{
@@ -31,7 +29,6 @@ func TestCreate(t *testing.T) {
 			name:        "when storage has record then create add one",
 			storage: storage.NewMemStorageWithData(
 				map[string]map[string][]string{"counter": {"test": []string{`{"value": 1, "name": "test"}`}}},
-				utils.InitLogger("[test]"),
 			),
 		},
 	}
@@ -61,7 +58,6 @@ func TestLast(t *testing.T) {
 			name:        "when storage has record then returns error",
 			storage: storage.NewMemStorageWithData(
 				map[string]map[string][]string{"counter": {"test": []string{`{"value": 1, "name": "test"}`}}},
-				utils.InitLogger("[test]"),
 			),
 		},
 		{
@@ -70,7 +66,6 @@ func TestLast(t *testing.T) {
 			wantsError:  storage.ErrNoRecords,
 			storage: storage.NewMemStorageWithData(
 				map[string]map[string][]string{"counter": {"test": []string{`{"value": 1, "name": "test"}`}}},
-				utils.InitLogger("[test]"),
 			),
 		},
 	}
@@ -104,7 +99,6 @@ func TestCounter_All(t *testing.T) {
 							"baz": []string{`{"value": 0, "name": "baz"}`},
 						},
 					},
-					utils.InitLogger("[test]"),
 				),
 			},
 			want: map[string][]models.Counter{
@@ -117,7 +111,6 @@ func TestCounter_All(t *testing.T) {
 			fields: fields{
 				storage: storage.NewMemStorageWithData(
 					map[string]map[string][]string{},
-					utils.InitLogger("[test]"),
 				),
 			},
 			want: map[string][]models.Counter{},

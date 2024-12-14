@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
 )
 
 func TestLast(t *testing.T) {
@@ -53,7 +52,7 @@ func TestLast(t *testing.T) {
 
 	for _, tt := range tasks {
 		t.Run(tt.name, func(t *testing.T) {
-			storage := NewMemStorageWithData(tt.data, utils.InitLogger("[test]"))
+			storage := NewMemStorageWithData(tt.data)
 			val, err := storage.Last(tt.mType, tt.mName)
 			assert.ErrorIs(t, tt.wantError, err)
 			assert.Equal(t, tt.wantRecord, val)
@@ -86,7 +85,7 @@ func TestPush(t *testing.T) {
 
 	for _, tt := range tasks {
 		t.Run(tt.name, func(t *testing.T) {
-			storage := NewMemStorageWithData(tt.data, utils.InitLogger("[test]"))
+			storage := NewMemStorageWithData(tt.data)
 			err := storage.Push("counter", tt.val.Name, tt.val)
 			assert.NoError(t, err)
 

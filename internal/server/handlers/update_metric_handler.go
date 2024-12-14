@@ -10,23 +10,20 @@ import (
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/repositories"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
-	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
 )
 
 // const updateMeticsContentType string = "text/plain"
 
-type metricsUpdater func(m Metric, storage storage.Storage, logger utils.Logger) error
+type metricsUpdater func(m Metric, storage storage.Storage) error
 
 type UpdateMetricHandler struct {
-	logger         utils.Logger
 	storage        storage.Storage
 	metricsUpdater metricsUpdater
 }
 
-func NewUpdateMetricHandler(storage storage.Storage, logger utils.Logger) gin.HandlerFunc {
+func NewUpdateMetricHandler(storage storage.Storage) gin.HandlerFunc {
 	return updateMetricHandlerFunc(
 		&UpdateMetricHandler{
-			logger:         logger,
 			storage:        storage,
 			metricsUpdater: updateMetrics,
 		},
@@ -56,8 +53,7 @@ func updateMetricHandlerFunc(h *UpdateMetricHandler) gin.HandlerFunc {
 			Value: c.Param("value"),
 		}
 
-		if err := h.metricsUpdater(metric, h.storage, h.logger); err != nil {
-			h.logger.Printf("Update metric error\n%v", err)
+		if err := h.metricsUpdater(metric, h.storage); err != nil {
 			c.AbortWithStatus(http.StatusBadRequest)
 		}
 	}
@@ -72,18 +68,18 @@ func updateMetricHandlerFunc(h *UpdateMetricHandler) gin.HandlerFunc {
 // 	return nil
 // }
 
-func updateMetrics(m Metric, storage storage.Storage, logger utils.Logger) error {
+func updateMetrics(m Metric, storage storage.Storage) error {
 	if m.Type != "gauge" && m.Type != "counter" {
 		return fmt.Errorf("update_metric_service: underfined metric type: %s", m.Type)
 	}
 
 	if m.Type == "gauge" {
-		err := processGauge(&m, storage, logger)
+		err := processGauge(&m, storage)
 		if err != nil {
 			return err
 		}
 	} else {
-		err := processCounter(&m, storage, logger)
+		err := processCounter(&m, storage)
 		if err != nil {
 			return err
 		}
@@ -92,13 +88,12 @@ func updateMetrics(m Metric, storage storage.Storage, logger utils.Logger) error
 	return nil
 }
 
-func processGauge(m *Metric, storage storage.Storage, logger utils.Logger) error {
+func processGauge(m *Metric, storage storage.Storage) error {
 	g, err := newGauge(m)
 	if err != nil {
 		return err
 	}
 
-	logger.Printf("Create gauge: %v", g)
 	rep := repositories.NewGauge(storage)
 	if _, err := rep.Craete(g); err != nil {
 		return err
@@ -107,13 +102,12 @@ func processGauge(m *Metric, storage storage.Storage, logger utils.Logger) error
 	return nil
 }
 
-func processCounter(m *Metric, storage storage.Storage, logger utils.Logger) error {
+func processCounter(m *Metric, storage storage.Storage) error {
 	c, err := newCounter(m)
 	if err != nil {
 		return err
 	}
 
-	logger.Printf("Create counter: %v", c)
 	rep := repositories.NewCounter(storage)
 	if _, err := rep.Craete(c); err != nil {
 		return err

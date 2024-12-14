@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
-	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
 )
 
 func TestGauge_Last(t *testing.T) {
@@ -30,7 +29,6 @@ func TestGauge_Last(t *testing.T) {
 							"testSetGet241": []string{`{"value": 120400.951, "name": "testSetGet241"}`},
 						},
 					},
-					utils.InitLogger("[test]"),
 				),
 			},
 			want:    &models.Gauge{Value: 120400.951, Name: "testSetGet241"},
