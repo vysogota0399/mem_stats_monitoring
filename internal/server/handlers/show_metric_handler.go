@@ -48,5 +48,5 @@ func (h *ShowMetricHandler) fetchMetic(mType, mName string) (models.Metricable, 
 	case counter:
 		return h.counterRepository.Last(mName)
 	}
-	return nil, fmt.Errorf("show_metric_handler: fatch mType: %s, mName: %s error", mType, mName)
+	return nil, fmt.Errorf("internal/server/handlers/show_metric_handler.go: fatch mType: %s, mName: %s error", mType, mName)
 }

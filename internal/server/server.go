@@ -1,6 +1,8 @@
 package server
 
 import (
+	"bytes"
+	"io"
 	"net/http"
 	"time"
 
@@ -8,6 +10,7 @@ import (
 	uuid "github.com/satori/go.uuid"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/handlers"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/logger"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/server/service"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
 )
 
@@ -15,14 +18,16 @@ type Server struct {
 	config  Config
 	router  *gin.Engine
 	storage storage.Storage
+	service *service.Service
 }
 
 type NewServerOption func(*Server)
 
-func NewServer(c Config, storage storage.Storage) (*Server, error) {
+func NewServer(c Config, storage storage.Storage, service *service.Service) (*Server, error) {
 	s := Server{
-		config: c,
-		router: gin.New(),
+		config:  c,
+		router:  gin.New(),
+		service: service,
 	}
 
 	s.router.Use(
@@ -37,6 +42,8 @@ func NewServer(c Config, storage storage.Storage) (*Server, error) {
 func (s *Server) Start() error {
 	s.router.LoadHTMLGlob("internal/server/templates/*.tmpl")
 	s.router.POST("/update/:type/:name/:value", handlers.NewUpdateMetricHandler(s.storage))
+	s.router.POST("/update", handlers.NewRestUpdateMetricHandler(s.storage, s.service))
+	s.router.POST("/value", handlers.NewShowRestMetricHandler(s.storage))
 	s.router.GET("/value/:type/:name", handlers.NewShowMetricHandler(s.storage))
 	s.router.GET("/", handlers.NewRootHandler(s.storage))
 
@@ -60,17 +67,24 @@ func withLogger() gin.HandlerFunc {
 		raw := c.Request.URL.RawQuery
 		method := c.Request.Method
 
-		uuid.NewV4()
-		var requestID string
+		sugar := logger.Log.Sugar()
+		body, err := io.ReadAll(c.Request.Body)
+		if err != nil {
+			sugar.Error(err.Error())
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
 
+		c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
+
+		var requestID string
 		if reqID := c.Request.Header.Get("X-Request-ID"); reqID != "" {
 			requestID = reqID
 		} else {
 			requestID = uuid.NewV4().String()
 		}
 
-		sugar := logger.Log.Sugar()
-		sugar.Infof("[%s] %s %s %s", requestID, method, path, raw)
+		sugar.Infof("[%s] %s %s %s %s", requestID, method, path, raw, string(body))
 		c.Next()
 
 		status := c.Writer.Status()

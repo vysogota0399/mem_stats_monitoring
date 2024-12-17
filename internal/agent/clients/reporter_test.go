@@ -1,11 +1,13 @@
 package clients
 
 import (
+	"bytes"
 	"net/http"
 	"testing"
 
 	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
 )
 
@@ -63,7 +65,55 @@ func TestNewReporter(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			client := NewTestClient(tt.ftransport)
 
-			assert.Equal(t, tt.err, client.UpdateMetric("fiz", "baz", "1", uuid.NewV4()))
+			assert.Equal(t, tt.err, client.UpdateMetric(models.CounterType, "baz", "1", uuid.NewV4()))
+		})
+	}
+}
+
+func Test_prepareBody(t *testing.T) {
+	type args struct {
+		mType string
+		mName string
+		value string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    *bytes.Buffer
+		wantErr bool
+	}{
+		{
+			args: args{
+				mType: models.CounterType,
+				mName: "test",
+				value: "1",
+			},
+			name:    "when counter",
+			wantErr: false,
+		},
+		{
+			args: args{
+				mType: models.GaugeType,
+				mName: "test",
+				value: "1",
+			},
+			name:    "when gauge",
+			wantErr: false,
+		},
+		{
+			args: args{
+				mType: "underfined",
+				mName: "",
+				value: "",
+			},
+			name:    "when underfined",
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := prepareBody(tt.args.mType, tt.args.mName, tt.args.value)
+			assert.Equal(t, tt.wantErr, err != nil)
 		})
 	}
 }

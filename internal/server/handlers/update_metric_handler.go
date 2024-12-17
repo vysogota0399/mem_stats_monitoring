@@ -12,8 +12,6 @@ import (
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
 )
 
-// const updateMeticsContentType string = "text/plain"
-
 type metricsUpdater func(m Metric, storage storage.Storage) error
 
 type UpdateMetricHandler struct {
@@ -58,15 +56,6 @@ func updateMetricHandlerFunc(h *UpdateMetricHandler) gin.HandlerFunc {
 		}
 	}
 }
-
-// func validateHeader(r *http.Request) error {
-// 	contentType := r.Header.Get("Content-Type")
-// 	if contentType != updateMeticsContentType {
-// 		return fmt.Errorf("update_metric_handler: expected content type: %s, got: %s", updateMeticsContentType, contentType)
-// 	}
-
-// 	return nil
-// }
 
 func updateMetrics(m Metric, storage storage.Storage) error {
 	if m.Type != "gauge" && m.Type != "counter" {

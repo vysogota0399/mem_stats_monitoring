@@ -6,6 +6,7 @@ import (
 
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/logger"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/server/service"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
 )
 
@@ -27,7 +28,12 @@ func run() {
 		log.Fatal(err)
 	}
 
-	s, err := server.NewServer(config, storage.New())
+	storage := storage.New()
+	s, err := server.NewServer(
+		config,
+		storage,
+		service.New(storage),
+	)
 	if err != nil {
 		log.Fatal(err)
 	}

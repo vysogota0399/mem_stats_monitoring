@@ -1,6 +1,10 @@
 package models
 
-import "fmt"
+import (
+	"fmt"
+)
+
+const CounterType = "counter"
 
 type Counter struct {
 	Value int64  `json:"value"`
