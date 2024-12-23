@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 	uuid "github.com/satori/go.uuid"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/handlers"
@@ -32,7 +33,8 @@ func NewServer(c Config, storage storage.Storage, service *service.Service) (*Se
 
 	s.router.Use(
 		gin.Recovery(),
-		withLogger(),
+		httpLogger(),
+		gzip.Gzip(gzip.DefaultCompression),
 	)
 
 	s.storage = storage
@@ -42,8 +44,8 @@ func NewServer(c Config, storage storage.Storage, service *service.Service) (*Se
 func (s *Server) Start() error {
 	s.router.LoadHTMLGlob("internal/server/templates/*.tmpl")
 	s.router.POST("/update/:type/:name/:value", handlers.NewUpdateMetricHandler(s.storage))
-	s.router.POST("/update", handlers.NewRestUpdateMetricHandler(s.storage, s.service))
-	s.router.POST("/value", handlers.NewShowRestMetricHandler(s.storage))
+	s.router.POST("/update/", handlers.NewRestUpdateMetricHandler(s.storage, s.service))
+	s.router.POST("/value/", handlers.NewShowRestMetricHandler(s.storage))
 	s.router.GET("/value/:type/:name", handlers.NewShowMetricHandler(s.storage))
 	s.router.GET("/", handlers.NewRootHandler(s.storage))
 
@@ -60,7 +62,7 @@ func (s *Server) Start() error {
 	return nil
 }
 
-func withLogger() gin.HandlerFunc {
+func httpLogger() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path

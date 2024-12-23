@@ -16,7 +16,7 @@ import (
 )
 
 func Test_showRestMetricHandlerFunc(t *testing.T) {
-	const expectedRoute = "/value"
+	const expectedRoute = "/value/"
 	const expectedMType = "gauge"
 	const expectedMName = "test"
 	const unexpectedMName = "notfound"
@@ -40,6 +40,7 @@ func Test_showRestMetricHandlerFunc(t *testing.T) {
 	type want struct {
 		status  int
 		payload []byte
+		ctype   string
 	}
 	tests := []struct {
 		name string
@@ -56,6 +57,7 @@ func Test_showRestMetricHandlerFunc(t *testing.T) {
 			want: want{
 				status:  200,
 				payload: []byte(fmt.Sprintf(`{"id": "%s", "type": "%s", "value": %f}`, expectedMName, expectedMType, expectedMValue)),
+				ctype:   "application/json",
 			},
 		},
 		{
@@ -68,6 +70,7 @@ func Test_showRestMetricHandlerFunc(t *testing.T) {
 			want: want{
 				status:  400,
 				payload: []byte(`{}`),
+				ctype:   "application/json",
 			},
 		},
 		{
@@ -80,6 +83,7 @@ func Test_showRestMetricHandlerFunc(t *testing.T) {
 			want: want{
 				status:  404,
 				payload: []byte(`{}`),
+				ctype:   "application/json",
 			},
 		},
 	}
@@ -112,6 +116,7 @@ func Test_showRestMetricHandlerFunc(t *testing.T) {
 
 			assert.Equal(t, tt.want.status, result.StatusCode)
 			assert.JSONEq(t, string(tt.want.payload), w.Body.String())
+			assert.Equal(t, tt.want.ctype, w.Header().Get("Content-Type"))
 		})
 	}
 }

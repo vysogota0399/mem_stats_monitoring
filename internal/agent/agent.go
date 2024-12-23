@@ -29,7 +29,7 @@ func NewAgent(config Config, store storage.Storage) *Agent {
 		logger:        utils.InitLogger("[agent]"),
 		storage:       store,
 		config:        config,
-		httpClient:    clients.NewReporter(config.ServerURL),
+		httpClient:    clients.NewCompReporter(config.ServerURL),
 		memoryMetics:  memMetricsDefinition,
 		customMetrics: customMetricsDefinition,
 	}

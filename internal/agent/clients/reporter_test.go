@@ -41,7 +41,7 @@ func TestNewReporter(t *testing.T) {
 			name: "when 200",
 			err:  nil,
 			ftransport: func(r *http.Request) *http.Response {
-				assert.Equal(t, r.Header.Get("Content-Type"), "text/plain")
+				assert.Equal(t, r.Header.Get("Content-Type"), "application/json")
 				return &http.Response{
 					StatusCode: http.StatusOK,
 					Header:     make(http.Header),
@@ -52,7 +52,7 @@ func TestNewReporter(t *testing.T) {
 			name: "when not 200",
 			err:  ErrUnsuccessfulResponse,
 			ftransport: func(r *http.Request) *http.Response {
-				assert.Equal(t, r.Header.Get("Content-Type"), "text/plain")
+				assert.Equal(t, r.Header.Get("Content-Type"), "application/json")
 				return &http.Response{
 					StatusCode: http.StatusBadRequest,
 					Header:     make(http.Header),

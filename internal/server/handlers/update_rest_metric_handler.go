@@ -38,6 +38,7 @@ func NewRestUpdateMetricHandler(s storage.Storage, service *service.Service) gin
 
 func updateRestMetricHandlerFunc(h *UpdateRestMetricHandler) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		c.Writer.Header().Add("Content-Type", "application/json")
 		var metric Metrics
 		if err := c.ShouldBindJSON(&metric); err != nil {
 			logger.Log.Error(err.Error())
@@ -65,7 +66,5 @@ func updateRestMetricHandlerFunc(h *UpdateRestMetricHandler) gin.HandlerFunc {
 			logger.Log.Error("error encoding response", zap.Error(err))
 			c.AbortWithStatus(http.StatusInternalServerError)
 		}
-
-		c.Writer.Header().Add("Content-Type", "application/json")
 	}
 }

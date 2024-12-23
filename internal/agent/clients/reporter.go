@@ -2,6 +2,7 @@ package clients
 
 import (
 	"bytes"
+	"compress/flate"
 	"context"
 	"encoding/json"
 	"errors"
@@ -17,14 +18,29 @@ import (
 
 var ErrUnsuccessfulResponse error = errors.New("mem_stats_server: response not success")
 
+type compressor func(*bytes.Buffer) (*bytes.Buffer, error)
 type Reporter struct {
-	client  *http.Client
-	address string
-	logger  utils.Logger
+	client     *http.Client
+	address    string
+	logger     utils.Logger
+	compressor compressor
 }
 
 func NewReporter(address string) *Reporter {
-	return &Reporter{address: address, client: &http.Client{}, logger: utils.InitLogger("[http]")}
+	return &Reporter{
+		address: address,
+		client:  &http.Client{},
+		logger:  utils.InitLogger("[http]"),
+	}
+}
+
+func NewCompReporter(address string) *Reporter {
+	return &Reporter{
+		address:    address,
+		client:     &http.Client{},
+		logger:     utils.InitLogger("[http]"),
+		compressor: gzbody,
+	}
 }
 
 func (c *Reporter) UpdateMetric(mType, mName, value string, requestID uuid.UUID) error {
@@ -35,7 +51,7 @@ func (c *Reporter) UpdateMetric(mType, mName, value string, requestID uuid.UUID)
 
 	req, err := http.NewRequestWithContext(
 		context.TODO(),
-		"POST", fmt.Sprintf("%s/update/%s/%s/%v", c.address, mType, mName, value),
+		"POST", fmt.Sprintf("%s/update/", c.address),
 		body,
 	)
 
@@ -43,7 +59,7 @@ func (c *Reporter) UpdateMetric(mType, mName, value string, requestID uuid.UUID)
 		return fmt.Errorf("internal/agent/clients/reporter: create request err: %w", err)
 	}
 
-	req.Header.Add("Content-Type", "text/plain")
+	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("X-Request-ID", requestID.String())
 
 	resp, err := c.requestDo(req, requestID)
@@ -138,4 +154,23 @@ func prepareBody(mType, mName, value string) (*bytes.Buffer, error) {
 	}
 
 	return bytes.NewBuffer(buff), nil
+}
+
+func gzbody(b *bytes.Buffer) (*bytes.Buffer, error) {
+	var res *bytes.Buffer
+	w, err := flate.NewWriter(b, flate.BestCompression)
+	if err != nil {
+		return nil, err
+	}
+	_, err = w.Write(res.Bytes())
+	if err != nil {
+		return nil, fmt.Errorf("internal/agent/clients/reporter.go write to buffer error %w", err)
+	}
+
+	err = w.Close()
+	if err != nil {
+		return nil, fmt.Errorf("internal/agent/clients/reporter.go close writer error %w", err)
+	}
+
+	return res, nil
 }

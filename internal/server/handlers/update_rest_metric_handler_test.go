@@ -30,7 +30,7 @@ func (s failureSerice) Call(p service.UpdateMetricServiceParams) (service.Update
 }
 
 func Test_updateRestMetricHandlerFunc(t *testing.T) {
-	var expectedRoute = "/update"
+	var expectedRoute = "/update/"
 
 	type args struct {
 		service UpdateMetricService
@@ -39,6 +39,7 @@ func Test_updateRestMetricHandlerFunc(t *testing.T) {
 	type want struct {
 		status  int
 		payload []byte
+		ctype   string
 	}
 	tests := []struct {
 		name string
@@ -54,6 +55,7 @@ func Test_updateRestMetricHandlerFunc(t *testing.T) {
 			want: want{
 				status:  200,
 				payload: []byte(fmt.Sprintf(`{"id": "test", "type": "gauge", "value": %v}`, expectedValue)),
+				ctype:   "application/json",
 			},
 		},
 		{
@@ -65,6 +67,7 @@ func Test_updateRestMetricHandlerFunc(t *testing.T) {
 			want: want{
 				status:  400,
 				payload: []byte(`{}`),
+				ctype:   "application/json",
 			},
 		},
 		{
@@ -76,6 +79,7 @@ func Test_updateRestMetricHandlerFunc(t *testing.T) {
 			want: want{
 				status:  400,
 				payload: []byte(`{}`),
+				ctype:   "application/json",
 			},
 		},
 	}
@@ -110,6 +114,7 @@ func Test_updateRestMetricHandlerFunc(t *testing.T) {
 
 			assert.Equal(t, tt.want.status, result.StatusCode)
 			assert.JSONEq(t, string(tt.want.payload), w.Body.String())
+			assert.Equal(t, tt.want.ctype, w.Header().Get("Content-Type"))
 		})
 	}
 }

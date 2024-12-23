@@ -42,6 +42,7 @@ type showRestMetricResponse struct {
 
 func showRestMetricHandlerFunc(h *ShowRestMetricHandler) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		c.Writer.Header().Add("Content-Type", "application/json")
 		var params showRestMetricParams
 
 		if err := c.ShouldBindJSON(&params); err != nil {
@@ -68,8 +69,6 @@ func showRestMetricHandlerFunc(h *ShowRestMetricHandler) gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{})
 			return
 		}
-
-		c.Writer.Header().Add("Content-Type", "application/json")
 	}
 }
 
@@ -89,7 +88,7 @@ func (h *ShowRestMetricHandler) fetchMetic(mType, mName string) (showRestMetricR
 	case counter:
 		record, err := h.counterRepository.Last(mName)
 		if err != nil {
-			return showRestMetricResponse{}, nil
+			return showRestMetricResponse{}, err
 		}
 
 		return showRestMetricResponse{
