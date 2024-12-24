@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/repositories"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
 )
@@ -11,7 +12,8 @@ import (
 func TestUpdateMetricService_Call(t *testing.T) {
 	var value = 1.0
 	var delta int64 = 1
-	s := storage.NewMemory()
+	var zeroValue float64
+	var zeroDelta int64
 	tests := []struct {
 		name    string
 		args    UpdateMetricServiceParams
@@ -22,61 +24,69 @@ func TestUpdateMetricService_Call(t *testing.T) {
 			name: "when counter with delta returns new value",
 			args: UpdateMetricServiceParams{
 				MName: "test",
-				MType: "counter",
+				MType: models.CounterType,
 				Value: &value,
 				Delta: &delta,
 			},
 			wantErr: false,
 			want: UpdateMetricServiceResult{
 				ID:    "test",
-				MType: "counter",
+				MType: models.CounterType,
 				Delta: &delta,
 			},
 		},
 		{
-			name: "when counter without delta then returns error",
+			name: "when counter without delta then returns no error",
 			args: UpdateMetricServiceParams{
 				MName: "test",
-				MType: "counter",
-				Delta: nil,
+				MType: models.CounterType,
 			},
-			wantErr: true,
-			want:    UpdateMetricServiceResult{},
+			wantErr: false,
+			want: UpdateMetricServiceResult{
+				ID:    "test",
+				MType: models.CounterType,
+				Delta: &zeroDelta,
+			},
 		},
 		{
 			name: "when gauge with value returns new value",
 			args: UpdateMetricServiceParams{
 				MName: "test",
-				MType: "gauge",
+				MType: models.GaugeType,
 				Value: &value,
 			},
 			wantErr: false,
 			want: UpdateMetricServiceResult{
 				ID:    "test",
-				MType: "gauge",
+				MType: models.GaugeType,
 				Value: &value,
 			},
 		},
 		{
-			name: "when gauge without value then returns error",
+			name: "when gauge without value then returns no error",
 			args: UpdateMetricServiceParams{
 				MName: "test",
-				MType: "counter",
-				Value: nil,
+				MType: models.GaugeType,
 			},
-			wantErr: true,
-			want:    UpdateMetricServiceResult{},
+			wantErr: false,
+			want: UpdateMetricServiceResult{
+				ID:    "test",
+				MType: models.GaugeType,
+				Value: &zeroValue,
+			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			s := storage.NewMemory()
+
 			counterRep := repositories.NewCounter(s)
 			gaugeRep := repositories.NewGauge(s)
-			s := UpdateMetricService{
+			serv := UpdateMetricService{
 				counterRep: counterRep,
 				gaugeRep:   gaugeRep,
 			}
-			res, err := s.Call(tt.args)
+			res, err := serv.Call(tt.args)
 			assert.Equal(t, tt.wantErr, err != nil)
 			assert.Equal(t, tt.want, res)
 		})

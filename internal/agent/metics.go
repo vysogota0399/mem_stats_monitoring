@@ -148,6 +148,14 @@ var memMetricsDefinition []MemMetric = []MemMetric{
 		Name: "TotalAlloc", Type: "gauge",
 		generateValue: func(stat *runtime.MemStats) any { return stat.TotalAlloc },
 	},
+	{
+		Name: "MSpanInuse", Type: "gauge",
+		generateValue: func(stat *runtime.MemStats) any { return stat.MSpanInuse },
+	},
+	{
+		Name: "MSpanSys", Type: "gauge",
+		generateValue: func(stat *runtime.MemStats) any { return stat.MSpanSys },
+	},
 }
 
 var customMetricsDefinition = []CustomMetric{
@@ -190,6 +198,7 @@ var customMetricsDefinition = []CustomMetric{
 
 func (a *Agent) processMemMetrics(operationID uuid.UUID) {
 	memStat := runtime.MemStats{}
+	runtime.ReadMemStats(&memStat)
 
 	for _, m := range a.memoryMetics {
 		val, err := convertToStr(m.generateValue(&memStat))

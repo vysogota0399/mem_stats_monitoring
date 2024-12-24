@@ -112,7 +112,8 @@ func Test_prepareBody(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := prepareBody(tt.args.mType, tt.args.mName, tt.args.value)
+			client := NewTestClient(func(req *http.Request) *http.Response { return nil })
+			_, err := client.prepareBody(tt.args.mType, tt.args.mName, tt.args.value)
 			assert.Equal(t, tt.wantErr, err != nil)
 		})
 	}

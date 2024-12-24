@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"time"
@@ -44,7 +45,7 @@ func NewCompReporter(address string) *Reporter {
 }
 
 func (c *Reporter) UpdateMetric(mType, mName, value string, requestID uuid.UUID) error {
-	body, err := prepareBody(mType, mName, value)
+	body, err := c.prepareBody(mType, mName, value)
 	if err != nil {
 		return err
 	}
@@ -82,16 +83,28 @@ func (c *Reporter) requestDo(req *http.Request, requestID uuid.UUID) (*http.Resp
 	c.logger.Printf("[%s] REQUEST BEGIN", requestID)
 	c.logger.Printf("[%s] %s %s", requestID, req.Method, req.URL)
 	c.logger.Printf("[%s] Headers: %v", requestID, req.Header)
+	defer c.logger.Printf("[%s] REQUEST END", requestID)
+
+	reader, err := req.GetBody()
+	if err != nil {
+		return nil, err
+	}
+
+	b, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, err
+	}
+
+	c.logger.Printf("[%s] Body: %s", requestID, b)
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		c.logger.Printf("[%s] REQUEST END", requestID)
+
 		return nil, err
 	}
 
 	c.logger.Printf("[%s] Duration: %v", requestID, time.Since(start))
 	c.logger.Printf("[%s] Response: %s", requestID, resp.Status)
-	c.logger.Printf("[%s] REQUEST END", requestID)
 
 	return resp, nil
 }
@@ -109,7 +122,7 @@ func (m MetricsBody) MarshalJSON() ([]byte, error) {
 	aliasValue := struct {
 		MetricsBodyAlias
 		Delta int     `json:"delta,omitempty"` // значение метрики в случае передачи counter
-		Value float64 `json:"value,omitempty"`
+		Value float64 `json:"value,omitempty"` // значение метрики в случае передачи gauge
 	}{
 		MetricsBodyAlias: MetricsBodyAlias(m),
 	}
@@ -133,7 +146,7 @@ func (m MetricsBody) MarshalJSON() ([]byte, error) {
 	return json.Marshal(aliasValue)
 }
 
-func prepareBody(mType, mName, value string) (*bytes.Buffer, error) {
+func (c Reporter) prepareBody(mType, mName, value string) (*bytes.Buffer, error) {
 	rec := MetricsBody{
 		MName: mName,
 		MType: mType,
@@ -147,7 +160,6 @@ func prepareBody(mType, mName, value string) (*bytes.Buffer, error) {
 	default:
 		return nil, fmt.Errorf("internal/agent/clients/reporter.go: underfined type %s", mType)
 	}
-
 	buff, err := json.Marshal(rec)
 	if err != nil {
 		return nil, err

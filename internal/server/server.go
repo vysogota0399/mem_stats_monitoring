@@ -66,7 +66,6 @@ func httpLogger() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path
-		raw := c.Request.URL.RawQuery
 		method := c.Request.Method
 
 		sugar := logger.Log.Sugar()
@@ -86,12 +85,25 @@ func httpLogger() gin.HandlerFunc {
 			requestID = uuid.NewV4().String()
 		}
 
-		sugar.Infof("[%s] %s %s %s %s", requestID, method, path, raw, string(body))
+		sugar.Infow(
+			"Request",
+			"request_id", requestID,
+			"method", method,
+			"path", path,
+			"params", c.Params,
+			"body", string(body),
+		)
 		c.Next()
 
 		status := c.Writer.Status()
 		bodySize := c.Writer.Size()
 
-		sugar.Infof("[%s] Response %d %d (%v)", requestID, status, bodySize, time.Since(start))
+		sugar.Infow(
+			"Response",
+			"request_id", requestID,
+			"status", status,
+			"body_size", bodySize,
+			"duration", time.Since(start),
+		)
 	}
 }
