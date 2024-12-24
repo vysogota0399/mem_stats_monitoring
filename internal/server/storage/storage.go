@@ -12,6 +12,7 @@ type Storage interface {
 	Last(mType, mName string) (string, error)
 	Push(mType, mName string, val any) error
 	All() map[string]map[string][]string
+	restore() error
 }
 
 var ErrNoRecords = errors.New("memory: no records error")
@@ -29,6 +30,10 @@ var ErrNoRecords = errors.New("memory: no records error")
 type Memory struct {
 	storage map[string]map[string][]string
 	mutex   sync.Mutex
+}
+
+func (m *Memory) restore() error {
+	return nil
 }
 
 func NewMemStorageWithData(storage map[string]map[string][]string) *Memory {

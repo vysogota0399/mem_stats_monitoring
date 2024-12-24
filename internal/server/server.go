@@ -9,6 +9,7 @@ import (
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 	uuid "github.com/satori/go.uuid"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/server/config"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/handlers"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/logger"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/service"
@@ -16,7 +17,7 @@ import (
 )
 
 type Server struct {
-	config  Config
+	config  config.Config
 	router  *gin.Engine
 	storage storage.Storage
 	service *service.Service
@@ -24,7 +25,7 @@ type Server struct {
 
 type NewServerOption func(*Server)
 
-func NewServer(c Config, storage storage.Storage, service *service.Service) (*Server, error) {
+func NewServer(c config.Config, storage storage.Storage, service *service.Service) (*Server, error) {
 	s := Server{
 		config:  c,
 		router:  gin.New(),
@@ -38,6 +39,7 @@ func NewServer(c Config, storage storage.Storage, service *service.Service) (*Se
 	)
 
 	s.storage = storage
+	logger.Log.Sugar().Debugf("Config: %s", c)
 	return &s, nil
 }
 

@@ -1,36 +1,36 @@
 package main
 
 import (
-	"flag"
 	"log"
 
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/server/config"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/logger"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/service"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
 )
 
-var flagRunAddr string
-
-func parseFlags() {
-	flag.StringVar(&flagRunAddr, "a", "localhost:8080", "address and port to run server")
-	flag.Parse()
-}
-
 func main() {
-	parseFlags()
 	run()
 }
 
 func run() {
-	config := server.NewConfig(flagRunAddr)
-	if err := logger.Initialize(config.LogLevel, config.AppEnv); err != nil {
+	cfg, err := config.NewConfig()
+	if err != nil {
 		log.Fatal(err)
 	}
 
-	storage := storage.New()
+	if err := logger.Initialize(cfg.LogLevel, cfg.AppEnv); err != nil {
+		log.Fatal(err)
+	}
+
+	storage, err := storage.NewPersistentMemory(cfg)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	s, err := server.NewServer(
-		config,
+		cfg,
 		storage,
 		service.New(storage),
 	)
