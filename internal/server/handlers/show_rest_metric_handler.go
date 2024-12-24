@@ -19,11 +19,11 @@ type ShowRestMetricHandler struct {
 	counterRepository repositories.Counter
 }
 
-func NewShowRestMetricHandler(storage storage.Storage) gin.HandlerFunc {
+func NewShowRestMetricHandler(strg storage.Storage) gin.HandlerFunc {
 	return showRestMetricHandlerFunc(
 		&ShowRestMetricHandler{
-			gaugeRepository:   repositories.NewGauge(storage),
-			counterRepository: repositories.NewCounter(storage),
+			gaugeRepository:   repositories.NewGauge(strg),
+			counterRepository: repositories.NewCounter(strg),
 		},
 	)
 }

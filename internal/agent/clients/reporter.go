@@ -99,7 +99,6 @@ func (c *Reporter) requestDo(req *http.Request, requestID uuid.UUID) (*http.Resp
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-
 		return nil, err
 	}
 

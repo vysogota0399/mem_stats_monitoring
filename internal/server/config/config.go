@@ -33,9 +33,11 @@ func NewConfig() (Config, error) {
 	return c, nil
 }
 
+const defaultStoreInterval = 300
+
 func (c *Config) parseFlags() {
 	flag.StringVar(&c.Address, "a", "localhost:8080", "address and port to run server")
-	flag.Int64Var(&c.StoreInterval, "i", 300, "store data writer scheduller interval")
+	flag.Int64Var(&c.StoreInterval, "i", defaultStoreInterval, "store data writer scheduller interval")
 	flag.StringVar(&c.FileStoragePath, "f", "data/records.txt", "data storage path")
 	flag.BoolVar(&c.Restore, "r", true, "flat - restore from file on boot")
 	flag.Parse()

@@ -38,7 +38,7 @@ func run() {
 		log.Fatal(err)
 	}
 
-	storage, err := storage.NewPersistentMemory(ctx, cfg, &wg)
+	strg, err := storage.NewPersistentMemory(ctx, cfg, &wg)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -46,8 +46,8 @@ func run() {
 	s, err := server.NewServer(
 		ctx,
 		cfg,
-		storage,
-		service.New(storage),
+		strg,
+		service.New(strg),
 	)
 	if err != nil {
 		log.Fatal(err)

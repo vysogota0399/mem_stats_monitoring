@@ -27,11 +27,11 @@ type UpdateRestMetricHandler struct {
 	service UpdateMetricService
 }
 
-func NewRestUpdateMetricHandler(s storage.Storage, service *service.Service) gin.HandlerFunc {
+func NewRestUpdateMetricHandler(s storage.Storage, srvc *service.Service) gin.HandlerFunc {
 	return updateRestMetricHandlerFunc(
 		&UpdateRestMetricHandler{
 			storage: s,
-			service: service.UpdateMetricService,
+			service: srvc.UpdateMetricService,
 		},
 	)
 }

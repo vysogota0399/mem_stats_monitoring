@@ -7,15 +7,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"sync"
 	"time"
 
-	uuid "github.com/satori/go.uuid"
+	uuidgen "github.com/satori/go.uuid"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/config"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/logger"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/models"
+	"go.uber.org/zap"
 )
+
+const rwfmode fs.FileMode = 0666
 
 type DataReader struct {
 	file    *os.File
@@ -26,7 +30,7 @@ type DataReader struct {
 }
 
 func newDataReader(ctx context.Context, filename string, strg Storage) (*DataReader, error) {
-	f, err := os.OpenFile(filename, os.O_RDONLY|os.O_CREATE, 0666)
+	f, err := os.OpenFile(filename, os.O_RDONLY|os.O_CREATE, rwfmode)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +57,7 @@ type DataWriter struct {
 }
 
 func newDataWriter(ctx context.Context, filename string, strg Storage) (*DataWriter, error) {
-	f, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	f, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_APPEND, rwfmode)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +98,9 @@ func (dw *DataWriter) Write(b []byte) (n int, err error) {
 }
 
 func (dw *DataWriter) Truncate() (err error) {
-	_, err = dw.file.Seek(0, io.SeekStart)
+	if _, err = dw.file.Seek(0, io.SeekStart); err != nil {
+		return
+	}
 
 	err = dw.file.Truncate(0)
 	return
@@ -122,7 +128,7 @@ func (s *PMScheduller) Start() {
 	for {
 		select {
 		case <-s.ctx.Done():
-			logger.Log.Sugar().Debugln("Gracefull shutdown PMScheduller")
+			logger.Log.Sugar().Debugln("Graceful shutdown PMScheduller")
 			return
 		case <-time.After(s.dur):
 			if err := s.strg.Dump(); err != nil {
@@ -149,7 +155,12 @@ func NewPersistentMemory(ctx context.Context, c config.Config, wg *sync.WaitGrou
 	}
 	s.syncExport = c.StoreInterval == 0
 	if c.Restore {
-		go s.restore()
+		go func() {
+			if err := s.restore(); err != nil {
+				logger.Log.Error("Restore failed", zap.Error(err))
+				return
+			}
+		}()
 	}
 
 	if !s.syncExport {
@@ -160,15 +171,13 @@ func NewPersistentMemory(ctx context.Context, c config.Config, wg *sync.WaitGrou
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for {
-			select {
-			case <-s.ctx.Done():
-				logger.Log.Sugar().Debugln("Gracefull shutdown PersistentMemory - PENDING")
-				s.Dump()
-				logger.Log.Sugar().Debugln("Gracefull shutdown PersistentMemory - OK")
-				return
-			}
+
+		<-s.ctx.Done()
+		logger.Log.Sugar().Debugln("Graceful shutdown PersistentMemory - PENDING")
+		if err := s.Dump(); err != nil {
+			logger.Log.Sugar().Error(err)
 		}
+		logger.Log.Sugar().Debugln("Graceful shutdown PersistentMemory - OK")
 	}()
 
 	return s, nil
@@ -197,14 +206,14 @@ func (m *PersistentMemory) Push(mType, mName string, val any) error {
 
 	metric := persistentMetric{}
 
-	switch val.(type) {
+	switch val := val.(type) {
 	case models.Counter:
-		counter := val.(models.Counter)
+		counter := val
 		metric.MName = counter.Name
 		metric.MType = models.CounterType
 		metric.MValue = counter.Value
 	case models.Gauge:
-		gauge := val.(models.Gauge)
+		gauge := val
 		metric.MName = gauge.Name
 		metric.MType = models.GaugeType
 		metric.MValue = gauge.Value
@@ -244,7 +253,7 @@ func (m *PersistentMemory) restore() error {
 		return err
 	}
 
-	logger.Log.Sugar().Debugf("Storage restored, succeded: %d, failed: %d", sucCntr, failCntr)
+	logger.Log.Sugar().Debugf("Storage restored, succeeded: %d, failed: %d", sucCntr, failCntr)
 	return nil
 }
 
@@ -259,7 +268,7 @@ func (m *PersistentMemory) Dump() error {
 		return err
 	}
 
-	uuid := uuid.NewV4()
+	uuid := uuidgen.NewV4()
 	var sucCntr int64
 	var failCntr int64
 	logger.Log.Sugar().Infow("Dump start",
@@ -276,7 +285,7 @@ func (m *PersistentMemory) Dump() error {
 				if err := json.Unmarshal([]byte(metric), &record); err != nil {
 					failCntr++
 					logger.Log.Sugar().Errorw(
-						fmt.Sprintf("Dump for value %s failed with error: %w", metric, err),
+						fmt.Sprintf("Dump for value %s failed with error: %v", metric, err),
 						"dump_uuid", uuid.String(),
 					)
 					continue
@@ -294,7 +303,7 @@ func (m *PersistentMemory) Dump() error {
 				if err := json.NewEncoder(&b).Encode(record); err != nil {
 					failCntr++
 					logger.Log.Sugar().Errorw(
-						fmt.Sprintf("Encode for value %v failed with error: %w", record, err),
+						fmt.Sprintf("Encode for value %v failed with error: %v", record, err),
 						"dump_uuid", uuid.String(),
 					)
 					continue
@@ -303,7 +312,7 @@ func (m *PersistentMemory) Dump() error {
 				if _, err := dw.Write(b.Bytes()); err != nil {
 					failCntr++
 					logger.Log.Sugar().Errorw(
-						fmt.Sprintf("Save to file value %s failed with error: %w", b.String(), err),
+						fmt.Sprintf("Save to file value %s failed with error: %v", b.String(), err),
 						"dump_uuid", uuid.String(),
 					)
 					continue
@@ -311,13 +320,12 @@ func (m *PersistentMemory) Dump() error {
 
 				sucCntr++
 			}
-
 		}
 	}
 
 	logger.Log.Sugar().Infow("Dump finished",
 		"dump_uuid", uuid.String(),
-		"succeded", sucCntr,
+		"succeeded", sucCntr,
 		"failed", failCntr,
 	)
 	return nil

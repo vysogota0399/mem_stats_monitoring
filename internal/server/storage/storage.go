@@ -72,7 +72,6 @@ func (m *Memory) Push(mType, mName string, val any) error {
 
 	mTypeStorage[mName] = append(valuesStorage, string(jsonVal))
 
-	// logger.Log.Sugar().Debugf("Actual storage: %v", m.storage)
 	return nil
 }
 

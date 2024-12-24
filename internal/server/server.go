@@ -29,11 +29,11 @@ type Server struct {
 
 type NewServerOption func(*Server)
 
-func NewServer(ctx context.Context, c config.Config, storage storage.Storage, service *service.Service) (*Server, error) {
+func NewServer(ctx context.Context, c config.Config, strg storage.Storage, srvc *service.Service) (*Server, error) {
 	s := Server{
 		config:  c,
 		router:  gin.New(),
-		service: service,
+		service: srvc,
 		ctx:     ctx,
 	}
 
@@ -43,7 +43,7 @@ func NewServer(ctx context.Context, c config.Config, storage storage.Storage, se
 		gzip.Gzip(gzip.DefaultCompression),
 	)
 
-	s.storage = storage
+	s.storage = strg
 	logger.Log.Sugar().Debugf("Config: %s", c)
 	return &s, nil
 }
@@ -71,16 +71,11 @@ func (s *Server) Start(wg *sync.WaitGroup) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for {
-			select {
-			case <-s.ctx.Done():
-				logger.Log.Sugar().Debugln("Gracefull shutdown Server")
-				if err := server.Shutdown(s.ctx); err != nil {
-					logger.Log.Sugar().Error(err)
-				}
 
-				return
-			}
+		<-s.ctx.Done()
+		logger.Log.Sugar().Debugln("Graceful shutdown Server")
+		if err := server.Shutdown(s.ctx); err != nil {
+			logger.Log.Sugar().Error(err)
 		}
 	}()
 }
