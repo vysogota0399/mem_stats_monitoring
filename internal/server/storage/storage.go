@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"sync"
-
-	"github.com/vysogota0399/mem_stats_monitoring/internal/server/logger"
 )
 
 type Storage interface {
@@ -63,7 +61,7 @@ func (m *Memory) Push(mType, mName string, val any) error {
 
 	valuesStorage, ok := mTypeStorage[mName]
 	if !ok {
-		valuesStorage = make([]string, 1)
+		valuesStorage = []string{}
 		mTypeStorage[mName] = valuesStorage
 	}
 
@@ -71,11 +69,10 @@ func (m *Memory) Push(mType, mName string, val any) error {
 	if err != nil {
 		return err
 	}
-	strVal := string(jsonVal)
 
-	mTypeStorage[mName] = append(valuesStorage, strVal)
+	mTypeStorage[mName] = append(valuesStorage, string(jsonVal))
 
-	logger.Log.Sugar().Debugf("Actual storage: %v", m.storage)
+	// logger.Log.Sugar().Debugf("Actual storage: %v", m.storage)
 	return nil
 }
 

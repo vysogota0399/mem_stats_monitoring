@@ -63,7 +63,6 @@ func showRestMetricHandlerFunc(h *ShowRestMetricHandler) gin.HandlerFunc {
 			return
 		}
 
-		logger.Log.Sugar().Infof("Response: %v", response)
 		if err := json.NewEncoder(c.Writer).Encode(response); err != nil {
 			logger.Log.Error("encoding response error", zap.Error(err))
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{})

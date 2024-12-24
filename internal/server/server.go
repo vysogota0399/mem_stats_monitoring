@@ -2,8 +2,11 @@ package server
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/gin-contrib/gzip"
@@ -21,15 +24,17 @@ type Server struct {
 	router  *gin.Engine
 	storage storage.Storage
 	service *service.Service
+	ctx     context.Context
 }
 
 type NewServerOption func(*Server)
 
-func NewServer(c config.Config, storage storage.Storage, service *service.Service) (*Server, error) {
+func NewServer(ctx context.Context, c config.Config, storage storage.Storage, service *service.Service) (*Server, error) {
 	s := Server{
 		config:  c,
 		router:  gin.New(),
 		service: service,
+		ctx:     ctx,
 	}
 
 	s.router.Use(
@@ -43,7 +48,7 @@ func NewServer(c config.Config, storage storage.Storage, service *service.Servic
 	return &s, nil
 }
 
-func (s *Server) Start() error {
+func (s *Server) Start(wg *sync.WaitGroup) {
 	s.router.LoadHTMLGlob("internal/server/templates/*.tmpl")
 	s.router.POST("/update/:type/:name/:value", handlers.NewUpdateMetricHandler(s.storage))
 	s.router.POST("/update/", handlers.NewRestUpdateMetricHandler(s.storage, s.service))
@@ -57,11 +62,27 @@ func (s *Server) Start() error {
 		Handler:           s.router,
 	}
 
-	if err := server.ListenAndServe(); err != nil {
-		return err
-	}
+	go func() {
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Log.Sugar().Infof("listen: %s\n", err)
+		}
+	}()
 
-	return nil
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-s.ctx.Done():
+				logger.Log.Sugar().Debugln("Gracefull shutdown Server")
+				if err := server.Shutdown(s.ctx); err != nil {
+					logger.Log.Sugar().Error(err)
+				}
+
+				return
+			}
+		}
+	}()
 }
 
 func httpLogger() gin.HandlerFunc {
