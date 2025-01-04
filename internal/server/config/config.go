@@ -11,7 +11,7 @@ import (
 type Config struct {
 	Address         string `json:"address" env:"ADDRESS"`
 	AppEnv          string `json:"app_env" env:"APP_ENV" envDefault:"development"`
-	LogLevel        string `json:"log_level" env:"LOG_LEVEL" envDefault:"Info"`
+	LogLevel        int64  `json:"log_level" env:"LOG_LEVEL" envDefault:"0"`
 	StoreInterval   int64  `json:"store_interval" env:"STORE_INTERVAL" envDefault:"300"`
 	FileStoragePath string `json:"file_storage_path" env:"FILE_STORAGE_PATH" envDefault:"data/records.txt"`
 	Restore         bool   `json:"restore" env:"RESTORE" envDefault:"true"`

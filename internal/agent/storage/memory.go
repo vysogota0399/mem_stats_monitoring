@@ -1,12 +1,14 @@
 package storage
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
 
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/models"
-	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
+	"go.uber.org/zap"
 )
 
 var ErrNoRecords = errors.New("memory: no records error")
@@ -19,15 +21,16 @@ type Storage interface {
 type Memory struct {
 	storage map[string]map[string]string
 	mutex   sync.Mutex
-	logger  utils.Logger
+	lg      *logging.ZapLogger
+	ctx     context.Context
 }
 
-func NewMemoryStorage() *Memory {
-	logger := utils.InitLogger("[storage]")
+func NewMemoryStorage(ctx context.Context, lg *logging.ZapLogger) *Memory {
 	storage := make(map[string]map[string]string)
 
 	return &Memory{
-		logger:  logger,
+		ctx:     ctx,
+		lg:      lg,
 		storage: storage,
 		mutex:   sync.Mutex{},
 	}
@@ -39,10 +42,16 @@ func (s *Memory) Set(m *models.Metric) error {
 
 	mTypeStorage, ok := s.storage[m.Type]
 	if !ok {
-		s.logger.Printf("Add metric type(%s) to storage", m.Type)
 		mTypeStorage = make(map[string]string)
 		s.storage[m.Type] = mTypeStorage
 	}
+
+	s.lg.DebugCtx(s.ctx,
+		"add metric to storage",
+		zap.String("type", m.Type),
+		zap.String("name", m.Name),
+		zap.String("value", m.Value),
+	)
 	mTypeStorage[m.Name] = m.Value
 	return nil
 }

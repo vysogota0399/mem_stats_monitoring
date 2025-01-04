@@ -1,42 +1,32 @@
 package main
 
 import (
-	"flag"
-	"time"
+	"context"
+	"log"
 
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/config"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/storage"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
+	"go.uber.org/zap/zapcore"
 )
 
 func main() {
-	parseFlags()
-	config := agent.NewConfig(
-		time.Duration(flagPollInterval)*time.Second,
-		time.Duration(flagReportInterval)*time.Second,
-		flagServerAddr,
-	)
+	cfg, err := config.NewConfig()
+	if err != nil {
+		log.Fatal(err)
+	}
 
+	lg, err := logging.MustZapLogger(zapcore.Level(cfg.LogLevel))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	ctx := context.Background()
 	agent.NewAgent(
-		config,
-		storage.NewMemoryStorage(),
+		ctx,
+		lg,
+		cfg,
+		storage.NewMemoryStorage(ctx, lg),
 	).Start()
-}
-
-const (
-	defaultReportIntercal = 10
-	defaultPollInterval   = 2
-)
-
-var (
-	flagServerAddr     string
-	flagReportInterval int64
-	flagPollInterval   int64
-)
-
-func parseFlags() {
-	flag.StringVar(&flagServerAddr, "a", "localhost:8080", "address and port to run server")
-	flag.Int64Var(&flagReportInterval, "r", defaultReportIntercal, "Report interval")
-	flag.Int64Var(&flagPollInterval, "p", defaultPollInterval, "Poll interval")
-
-	flag.Parse()
 }

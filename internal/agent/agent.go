@@ -1,41 +1,47 @@
 package agent
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	uuid "github.com/satori/go.uuid"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/clients"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/config"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/storage"
-	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
+	"go.uber.org/zap"
 )
 
 type httpClient interface {
-	UpdateMetric(mType, mName, value string, requestID uuid.UUID) error
+	UpdateMetric(ctx context.Context, mType, mName, value string) error
 }
 
 type Agent struct {
-	logger        utils.Logger
+	ctx           context.Context
+	lg            *logging.ZapLogger
 	storage       storage.Storage
-	config        Config
+	cfg           config.Config
 	httpClient    httpClient
 	memoryMetics  []MemMetric
 	customMetrics []CustomMetric
 }
 
-func NewAgent(config Config, store storage.Storage) *Agent {
+func NewAgent(ctx context.Context, lg *logging.ZapLogger, cfg config.Config, store storage.Storage) *Agent {
 	return &Agent{
-		logger:        utils.InitLogger("[agent]"),
+		ctx:           lg.WithContextFields(ctx, zap.String("name", "agent")),
+		lg:            lg,
 		storage:       store,
-		config:        config,
-		httpClient:    clients.NewCompReporter(config.ServerURL),
+		cfg:           cfg,
+		httpClient:    clients.NewCompReporter(ctx, cfg.ServerURL, lg),
 		memoryMetics:  memMetricsDefinition,
 		customMetrics: customMetricsDefinition,
 	}
 }
 func (a Agent) Start() {
-	a.logger.Println(a.config)
+	a.lg.InfoCtx(a.ctx, "init", zap.Any("config", a.cfg))
 	wg := sync.WaitGroup{}
 	wg.Add(2)
 	a.startPoller(&wg)
@@ -47,10 +53,11 @@ func (a *Agent) startPoller(wg *sync.WaitGroup) {
 	go func() {
 		defer wg.Done()
 
+		ctx := a.lg.WithContextFields(a.ctx, zap.String("actor", "poller"))
 		for {
-			a.PollIteration()
-			a.logger.Printf("[poller] Sleep %v", a.config.PollInterval)
-			time.Sleep(a.config.PollInterval)
+			a.PollIteration(ctx)
+			a.lg.DebugCtx(ctx, "sleep", zap.Duration("dur", a.cfg.PollInterval))
+			time.Sleep(a.cfg.PollInterval)
 		}
 	}()
 }
@@ -59,31 +66,34 @@ func (a Agent) startReporter(wg *sync.WaitGroup) {
 	go func() {
 		defer wg.Done()
 
+		ctx := a.lg.WithContextFields(a.ctx, zap.String("actor", "reporter"))
 		for {
-			a.ReportIteration()
-			a.logger.Printf("[reporter]Sleep %v", a.config.ReportInterval)
-			time.Sleep(a.config.ReportInterval)
+			a.ReportIteration(ctx)
+			a.lg.DebugCtx(ctx, "sleep", zap.Duration("dur", a.cfg.PollInterval))
+			time.Sleep(a.cfg.ReportInterval)
 		}
 	}()
 }
 
-func (a *Agent) PollIteration() {
+func (a *Agent) PollIteration(ctx context.Context) {
 	operationID := uuid.NewV4()
-	a.logger.Printf("[poller][%v] OPERATION START", operationID)
-	a.processMemMetrics(operationID)
-	a.processCustomMetrics(operationID)
-	a.logger.Printf("[poller][%v] OPERATION FINISHED", operationID)
+	ctx = a.lg.WithContextFields(ctx, zap.String("operation_id", operationID.String()))
+	a.lg.DebugCtx(ctx, "start")
+	a.processMemMetrics(ctx)
+	a.processCustomMetrics(ctx)
+	a.lg.DebugCtx(ctx, "finished")
 }
 
-func (a Agent) ReportIteration() int {
+func (a Agent) ReportIteration(ctx context.Context) int {
 	var counter int
 	operationID := uuid.NewV4()
-	a.logger.Printf("[reporter][%v] OPERATION START", operationID)
+	ctx = a.lg.WithContextFields(ctx, zap.String("operation_id", operationID.String()))
+	a.lg.DebugCtx(ctx, "start")
 
 	for _, m := range a.memoryMetics {
-		count, err := a.doReport(m, operationID)
-		if err != nil {
-			a.logger.Printf("[reporter] err: %w", err)
+		count, err := a.doReport(ctx, m)
+		if err != nil && !errors.Is(err, storage.ErrNoRecords) {
+			a.lg.ErrorCtx(ctx, "report mem metrics failed", zap.Error(err))
 			continue
 		}
 
@@ -91,26 +101,26 @@ func (a Agent) ReportIteration() int {
 	}
 
 	for _, m := range a.customMetrics {
-		count, err := a.doReport(m, operationID)
-		if err != nil {
-			a.logger.Printf("[reporter] err: %w", err)
+		count, err := a.doReport(ctx, m)
+		if err != nil && !errors.Is(err, storage.ErrNoRecords) {
+			a.lg.ErrorCtx(ctx, "report custom metrics failed", zap.Error(err))
 			continue
 		}
 
 		counter += count
 	}
 
-	a.logger.Printf("[reporter][%v] OPERATION FINISHED", operationID)
+	a.lg.DebugCtx(ctx, "finished")
 	return counter
 }
 
-func (a *Agent) doReport(m Reportable, operationID uuid.UUID) (int, error) {
+func (a *Agent) doReport(ctx context.Context, m Reportable) (int, error) {
 	record, err := m.fromStore(a.storage)
 	if err != nil {
 		return 0, err
 	}
 
-	if err := a.httpClient.UpdateMetric(record.Type, record.Name, record.Value, operationID); err != nil {
+	if err := a.httpClient.UpdateMetric(ctx, record.Type, record.Name, record.Value); err != nil {
 		return 0, err
 	}
 
@@ -126,6 +136,6 @@ func convertToStr(val any) (string, error) {
 	case float64:
 		return fmt.Sprintf("%.2f", val2), nil
 	default:
-		return "", fmt.Errorf("internal/agent: value %v underfined type - %t error", val, val)
+		return "", fmt.Errorf("internal/agent: value %v underfined type - %T error", val, val)
 	}
 }

@@ -10,9 +10,10 @@ import (
 
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/config"
-	"github.com/vysogota0399/mem_stats_monitoring/internal/server/logger"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/service"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
+	"go.uber.org/zap/zapcore"
 )
 
 func main() {
@@ -33,12 +34,12 @@ func run() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	if err := logger.Initialize(cfg.LogLevel, cfg.AppEnv); err != nil {
+	lg, err := logging.MustZapLogger(zapcore.Level(cfg.LogLevel))
+	if err != nil {
 		log.Fatal(err)
 	}
 
-	strg, err := storage.NewPersistentMemory(ctx, cfg, &wg)
+	strg, err := storage.NewFilePersistentMemory(ctx, cfg, &wg, lg)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -48,6 +49,7 @@ func run() {
 		cfg,
 		strg,
 		service.New(strg),
+		lg,
 	)
 	if err != nil {
 		log.Fatal(err)
@@ -56,5 +58,4 @@ func run() {
 	s.Start(&wg)
 
 	wg.Wait()
-	logger.Log.Info("Main finished")
 }

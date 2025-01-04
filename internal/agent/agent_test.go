@@ -1,29 +1,37 @@
 package agent
 
 import (
+	"context"
 	"runtime"
 	"testing"
-	"time"
 
-	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/config"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/storage"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
+	"go.uber.org/zap/zapcore"
 )
 
 type mockClient struct{}
 
-func (c *mockClient) UpdateMetric(mType, mName, value string, requestID uuid.UUID) error {
+func (c *mockClient) UpdateMetric(ctx context.Context, mType, mName, value string) error {
 	return nil
 }
 func TestPollIteration(t *testing.T) {
+	cfg, err := config.NewConfig()
+	assert.NoError(t, err)
+
+	lg, err := logging.MustZapLogger(zapcore.DebugLevel)
+	assert.NoError(t, err)
+
+	ctx := context.Background()
+
 	agent := NewAgent(
-		NewConfig(
-			10*time.Second,
-			2*time.Second,
-			"http://test.com",
-		),
-		storage.NewMemoryStorage(),
+		ctx,
+		lg,
+		cfg,
+		storage.NewMemoryStorage(ctx, lg),
 	)
 	agent.httpClient = &mockClient{}
 
@@ -38,7 +46,7 @@ func TestPollIteration(t *testing.T) {
 		},
 	}
 
-	agent.PollIteration()
+	agent.PollIteration(ctx)
 	createdRecord, err := agent.storage.Get("gauge", "Alloc")
 	assert.NoError(t, err)
 	assert.Equal(t, &models.Metric{Name: "Alloc", Type: "gauge", Value: "0"}, createdRecord)
@@ -57,18 +65,24 @@ func TestPollIteration(t *testing.T) {
 }
 
 func TestReportIteration(t *testing.T) {
+	cfg, err := config.NewConfig()
+	assert.NoError(t, err)
+
+	lg, err := logging.MustZapLogger(zapcore.DebugLevel)
+	assert.NoError(t, err)
+
+	ctx := context.Background()
+
 	agent := NewAgent(
-		NewConfig(
-			10*time.Second,
-			2*time.Second,
-			"http://test.com",
-		),
-		storage.NewMemoryStorage(),
+		ctx,
+		lg,
+		cfg,
+		storage.NewMemoryStorage(ctx, lg),
 	)
 	agent.httpClient = &mockClient{}
 	agent.memoryMetics = []MemMetric{}
 
-	agent.PollIteration()
-	result := agent.ReportIteration()
+	agent.PollIteration(ctx)
+	result := agent.ReportIteration(ctx)
 	assert.Equal(t, len(agent.customMetrics), result)
 }

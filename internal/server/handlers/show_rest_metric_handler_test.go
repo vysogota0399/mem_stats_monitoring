@@ -13,6 +13,8 @@ import (
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/repositories"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
+	"go.uber.org/zap/zapcore"
 )
 
 func Test_showRestMetricHandlerFunc(t *testing.T) {
@@ -90,10 +92,14 @@ func Test_showRestMetricHandlerFunc(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			router := gin.Default()
+			lg, err := logging.MustZapLogger(zapcore.DebugLevel)
+			assert.NoError(t, err)
+
 			handler := showRestMetricHandlerFunc(
 				&ShowRestMetricHandler{
 					gaugeRepository:   tt.args.gaugeRepository,
 					counterRepository: tt.args.counterRepository,
+					lg:                lg,
 				},
 			)
 

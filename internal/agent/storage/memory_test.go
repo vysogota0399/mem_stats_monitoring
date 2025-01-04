@@ -1,15 +1,17 @@
 package storage
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/models"
-	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
+	"go.uber.org/zap/zapcore"
 )
 
-func NewMemoryStorageWithData(storage map[string]map[string]string, logger utils.Logger) *Memory {
-	return &Memory{storage: storage, logger: logger}
+func NewMemoryStorageWithData(storage map[string]map[string]string, lg *logging.ZapLogger) *Memory {
+	return &Memory{storage: storage, ctx: context.TODO(), lg: lg}
 }
 
 func TestGet(t *testing.T) {
@@ -57,7 +59,8 @@ func TestGet(t *testing.T) {
 
 	for _, tt := range tasks {
 		t.Run(tt.name, func(t *testing.T) {
-			storage := NewMemoryStorageWithData(tt.data, utils.InitLogger("[test]"))
+			lg, _ := logging.MustZapLogger(zapcore.DebugLevel)
+			storage := NewMemoryStorageWithData(tt.data, lg)
 			val, err := storage.Get(tt.mType, tt.mName)
 			assert.ErrorIs(t, err, tt.wantError)
 			assert.Equal(t, tt.wantRecord, val)
@@ -85,7 +88,8 @@ func TestSet(t *testing.T) {
 
 	for _, tt := range tasks {
 		t.Run(tt.name, func(t *testing.T) {
-			storage := NewMemoryStorageWithData(tt.data, utils.InitLogger("[test]"))
+			lg, _ := logging.MustZapLogger(zapcore.DebugLevel)
+			storage := NewMemoryStorageWithData(tt.data, lg)
 			assert.NoError(t, storage.Set(&tt.val))
 
 			actualValue := tt.data[tt.val.Type][tt.val.Name]

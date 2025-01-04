@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"crypto/rand"
 	"errors"
 	"fmt"
@@ -8,9 +9,9 @@ import (
 	"runtime"
 	"strconv"
 
-	uuid "github.com/satori/go.uuid"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/storage"
+	"go.uber.org/zap"
 )
 
 type MemValueGenerator func(*runtime.MemStats) any
@@ -196,14 +197,14 @@ var customMetricsDefinition = []CustomMetric{
 	},
 }
 
-func (a *Agent) processMemMetrics(operationID uuid.UUID) {
+func (a *Agent) processMemMetrics(ctx context.Context) {
 	memStat := runtime.MemStats{}
 	runtime.ReadMemStats(&memStat)
 
 	for _, m := range a.memoryMetics {
 		val, err := convertToStr(m.generateValue(&memStat))
 		if err != nil {
-			a.logger.Printf("[poller][%v] %v", operationID, err)
+			a.lg.ErrorCtx(ctx, "convert to str error", zap.Error(err))
 			continue
 		}
 		record := models.Metric{
@@ -212,19 +213,19 @@ func (a *Agent) processMemMetrics(operationID uuid.UUID) {
 			Value: val,
 		}
 
-		a.logger.Printf("[poller][%v] New value %s", operationID, record)
+		a.lg.DebugCtx(ctx, "new value", zap.Any("metric", record))
 		if err = a.storage.Set(&record); err != nil {
-			a.logger.Printf("[poller][%v] save value to storage error:%wvalue: %s", operationID, err, record)
+			a.lg.ErrorCtx(ctx, "save value to storage error", zap.Any("metric", record), zap.Error(err))
 			continue
 		}
 	}
 }
 
-func (a *Agent) processCustomMetrics(operationID uuid.UUID) {
+func (a *Agent) processCustomMetrics(ctx context.Context) {
 	for _, m := range a.customMetrics {
 		val, err := m.generateValue(m.Name, m.Type, a)
 		if err != nil {
-			a.logger.Printf("[poller][%v] generate value error:%w", operationID, err)
+			a.lg.ErrorCtx(ctx, "generate value error", zap.Error(err))
 			continue
 		}
 
@@ -234,9 +235,9 @@ func (a *Agent) processCustomMetrics(operationID uuid.UUID) {
 			Value: fmt.Sprintf("%v", val),
 		}
 
-		a.logger.Printf("[poller][%v] New value %s", operationID, record)
+		a.lg.DebugCtx(ctx, "new value", zap.Any("metric", record))
 		if err = a.storage.Set(&record); err != nil {
-			a.logger.Printf("[poller][%v] save value to storage error:%wvalue: %s", operationID, err, record)
+			a.lg.ErrorCtx(ctx, "save value to storage error", zap.Any("metric", record), zap.Error(err))
 			continue
 		}
 	}
