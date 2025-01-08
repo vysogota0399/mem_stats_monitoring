@@ -41,7 +41,7 @@ func TestNewReporter(t *testing.T) {
 			name: "when 200",
 			err:  nil,
 			ftransport: func(r *http.Request) *http.Response {
-				assert.Equal(t, r.Header.Get("Content-Type"), "text/plain")
+				assert.Equal(t, r.Header.Get("Content-Type"), "application/json")
 				return &http.Response{
 					StatusCode: http.StatusOK,
 					Header:     make(http.Header),
@@ -52,7 +52,7 @@ func TestNewReporter(t *testing.T) {
 			name: "when not 200",
 			err:  ErrUnsuccessfulResponse,
 			ftransport: func(r *http.Request) *http.Response {
-				assert.Equal(t, r.Header.Get("Content-Type"), "text/plain")
+				assert.Equal(t, r.Header.Get("Content-Type"), "application/json")
 				return &http.Response{
 					StatusCode: http.StatusBadRequest,
 					Header:     make(http.Header),
@@ -112,7 +112,8 @@ func Test_prepareBody(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := prepareBody(tt.args.mType, tt.args.mName, tt.args.value)
+			client := NewTestClient(func(req *http.Request) *http.Response { return nil })
+			_, err := client.prepareBody(tt.args.mType, tt.args.mName, tt.args.value)
 			assert.Equal(t, tt.wantErr, err != nil)
 		})
 	}

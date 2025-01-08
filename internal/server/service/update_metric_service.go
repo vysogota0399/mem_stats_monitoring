@@ -27,24 +27,24 @@ type UpdateMetricServiceResult struct {
 }
 
 func (s UpdateMetricService) Call(params UpdateMetricServiceParams) (UpdateMetricServiceResult, error) {
-	if params.MType == "counter" && params.Delta != nil {
+	if params.MType == models.CounterType {
 		return s.createCounter(params)
-	} else if params.MType == "gauge" && params.Value != nil {
+	} else if params.MType == models.GaugeType {
 		return s.createGauge(params)
 	}
 
-	return UpdateMetricServiceResult{}, fmt.Errorf(
-		"internal/server/service/update_metric_service.go: unexpected type(%s) or delta(%v)/value(%v)",
-		params.MType,
-		params.Delta,
-		params.Value,
-	)
+	return UpdateMetricServiceResult{}, fmt.Errorf("internal/server/service/update_metric_service.go: unexpected type(%s)", params.MType)
 }
 
 func (s UpdateMetricService) createCounter(params UpdateMetricServiceParams) (UpdateMetricServiceResult, error) {
+	var value int64
+	if params.Delta != nil {
+		value = *params.Delta
+	}
+
 	record, err := s.counterRep.Craete(models.Counter{
 		Name:  params.MName,
-		Value: *params.Delta,
+		Value: value,
 	})
 
 	if err != nil {
@@ -59,9 +59,14 @@ func (s UpdateMetricService) createCounter(params UpdateMetricServiceParams) (Up
 }
 
 func (s UpdateMetricService) createGauge(params UpdateMetricServiceParams) (UpdateMetricServiceResult, error) {
+	var value float64
+	if params.Value != nil {
+		value = *params.Value
+	}
+
 	record, err := s.gaugeRep.Craete(models.Gauge{
 		Name:  params.MName,
-		Value: *params.Value,
+		Value: value,
 	})
 
 	if err != nil {

@@ -2,10 +2,12 @@ package clients
 
 import (
 	"bytes"
+	"compress/flate"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"time"
@@ -17,25 +19,40 @@ import (
 
 var ErrUnsuccessfulResponse error = errors.New("mem_stats_server: response not success")
 
+type compressor func(*bytes.Buffer) (*bytes.Buffer, error)
 type Reporter struct {
-	client  *http.Client
-	address string
-	logger  utils.Logger
+	client     *http.Client
+	address    string
+	logger     utils.Logger
+	compressor compressor
 }
 
 func NewReporter(address string) *Reporter {
-	return &Reporter{address: address, client: &http.Client{}, logger: utils.InitLogger("[http]")}
+	return &Reporter{
+		address: address,
+		client:  &http.Client{},
+		logger:  utils.InitLogger("[http]"),
+	}
+}
+
+func NewCompReporter(address string) *Reporter {
+	return &Reporter{
+		address:    address,
+		client:     &http.Client{},
+		logger:     utils.InitLogger("[http]"),
+		compressor: gzbody,
+	}
 }
 
 func (c *Reporter) UpdateMetric(mType, mName, value string, requestID uuid.UUID) error {
-	body, err := prepareBody(mType, mName, value)
+	body, err := c.prepareBody(mType, mName, value)
 	if err != nil {
 		return err
 	}
 
 	req, err := http.NewRequestWithContext(
 		context.TODO(),
-		"POST", fmt.Sprintf("%s/update/%s/%s/%v", c.address, mType, mName, value),
+		"POST", fmt.Sprintf("%s/update/", c.address),
 		body,
 	)
 
@@ -43,7 +60,7 @@ func (c *Reporter) UpdateMetric(mType, mName, value string, requestID uuid.UUID)
 		return fmt.Errorf("internal/agent/clients/reporter: create request err: %w", err)
 	}
 
-	req.Header.Add("Content-Type", "text/plain")
+	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("X-Request-ID", requestID.String())
 
 	resp, err := c.requestDo(req, requestID)
@@ -66,16 +83,28 @@ func (c *Reporter) requestDo(req *http.Request, requestID uuid.UUID) (*http.Resp
 	c.logger.Printf("[%s] REQUEST BEGIN", requestID)
 	c.logger.Printf("[%s] %s %s", requestID, req.Method, req.URL)
 	c.logger.Printf("[%s] Headers: %v", requestID, req.Header)
+	defer c.logger.Printf("[%s] REQUEST END", requestID)
+
+	reader, err := req.GetBody()
+	if err != nil {
+		return nil, err
+	}
+
+	b, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, err
+	}
+
+	c.logger.Printf("[%s] Body: %s", requestID, b)
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		c.logger.Printf("[%s] REQUEST END", requestID)
+
 		return nil, err
 	}
 
 	c.logger.Printf("[%s] Duration: %v", requestID, time.Since(start))
 	c.logger.Printf("[%s] Response: %s", requestID, resp.Status)
-	c.logger.Printf("[%s] REQUEST END", requestID)
 
 	return resp, nil
 }
@@ -93,7 +122,7 @@ func (m MetricsBody) MarshalJSON() ([]byte, error) {
 	aliasValue := struct {
 		MetricsBodyAlias
 		Delta int     `json:"delta,omitempty"` // значение метрики в случае передачи counter
-		Value float64 `json:"value,omitempty"`
+		Value float64 `json:"value,omitempty"` // значение метрики в случае передачи gauge
 	}{
 		MetricsBodyAlias: MetricsBodyAlias(m),
 	}
@@ -117,7 +146,7 @@ func (m MetricsBody) MarshalJSON() ([]byte, error) {
 	return json.Marshal(aliasValue)
 }
 
-func prepareBody(mType, mName, value string) (*bytes.Buffer, error) {
+func (c Reporter) prepareBody(mType, mName, value string) (*bytes.Buffer, error) {
 	rec := MetricsBody{
 		MName: mName,
 		MType: mType,
@@ -131,11 +160,29 @@ func prepareBody(mType, mName, value string) (*bytes.Buffer, error) {
 	default:
 		return nil, fmt.Errorf("internal/agent/clients/reporter.go: underfined type %s", mType)
 	}
-
 	buff, err := json.Marshal(rec)
 	if err != nil {
 		return nil, err
 	}
 
 	return bytes.NewBuffer(buff), nil
+}
+
+func gzbody(b *bytes.Buffer) (*bytes.Buffer, error) {
+	var res *bytes.Buffer
+	w, err := flate.NewWriter(b, flate.BestCompression)
+	if err != nil {
+		return nil, err
+	}
+	_, err = w.Write(res.Bytes())
+	if err != nil {
+		return nil, fmt.Errorf("internal/agent/clients/reporter.go write to buffer error %w", err)
+	}
+
+	err = w.Close()
+	if err != nil {
+		return nil, fmt.Errorf("internal/agent/clients/reporter.go close writer error %w", err)
+	}
+
+	return res, nil
 }
