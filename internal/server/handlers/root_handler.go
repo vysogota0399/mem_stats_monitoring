@@ -13,10 +13,10 @@ type RootHandler struct {
 	storage storage.Storage
 }
 
-func NewRootHandler(storage storage.Storage) gin.HandlerFunc {
+func NewRootHandler(strg storage.Storage) gin.HandlerFunc {
 	return RootHandlerFunc(
 		&RootHandler{
-			storage: storage,
+			storage: strg,
 		},
 	)
 }

@@ -7,23 +7,26 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/vysogota0399/mem_stats_monitoring/internal/server/logger"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/repositories"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
 	"go.uber.org/zap"
 )
 
 type ShowRestMetricHandler struct {
 	gaugeRepository   repositories.Gauge
 	counterRepository repositories.Counter
+	lg                *logging.ZapLogger
 }
 
-func NewShowRestMetricHandler(storage storage.Storage) gin.HandlerFunc {
+func NewShowRestMetricHandler(strg storage.Storage, lg *logging.ZapLogger) gin.HandlerFunc {
 	return showRestMetricHandlerFunc(
 		&ShowRestMetricHandler{
-			gaugeRepository:   repositories.NewGauge(storage),
-			counterRepository: repositories.NewCounter(storage),
+			gaugeRepository:   repositories.NewGauge(strg),
+			counterRepository: repositories.NewCounter(strg),
+			lg:                lg,
 		},
 	)
 }
@@ -42,11 +45,12 @@ type showRestMetricResponse struct {
 
 func showRestMetricHandlerFunc(h *ShowRestMetricHandler) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		ctx := utils.InitHandlerCtx(c, h.lg, "show_rest_metrics_handler")
 		c.Writer.Header().Add("Content-Type", "application/json")
 		var params showRestMetricParams
 
 		if err := c.ShouldBindJSON(&params); err != nil {
-			logger.Log.Error(err.Error())
+			h.lg.DebugCtx(ctx, "Invalid params", zap.Error(err))
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{})
 			return
 		}
@@ -57,15 +61,13 @@ func showRestMetricHandlerFunc(h *ShowRestMetricHandler) gin.HandlerFunc {
 				c.AbortWithStatusJSON(http.StatusNotFound, gin.H{})
 				return
 			}
-
-			logger.Log.Error("show metric error", zap.Error(err))
+			h.lg.ErrorCtx(ctx, "Show metric error", zap.Error(err))
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{})
 			return
 		}
 
-		logger.Log.Sugar().Infof("Response: %v", response)
 		if err := json.NewEncoder(c.Writer).Encode(response); err != nil {
-			logger.Log.Error("encoding response error", zap.Error(err))
+			h.lg.ErrorCtx(ctx, "Encoding response error", zap.Error(err))
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{})
 			return
 		}

@@ -1,44 +1,61 @@
 package main
 
 import (
-	"flag"
+	"context"
 	"log"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server"
-	"github.com/vysogota0399/mem_stats_monitoring/internal/server/logger"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/server/config"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/service"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
+	"go.uber.org/zap/zapcore"
 )
 
-var flagRunAddr string
-
-func parseFlags() {
-	flag.StringVar(&flagRunAddr, "a", "localhost:8080", "address and port to run server")
-	flag.Parse()
-}
-
 func main() {
-	parseFlags()
 	run()
 }
 
 func run() {
-	config := server.NewConfig(flagRunAddr)
-	if err := logger.Initialize(config.LogLevel, config.AppEnv); err != nil {
+	wg := sync.WaitGroup{}
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		exit := make(chan os.Signal, 1)
+		signal.Notify(exit, os.Interrupt, syscall.SIGTERM)
+		<-exit
+		cancel()
+	}()
+
+	cfg, err := config.NewConfig()
+	if err != nil {
+		log.Fatal(err)
+	}
+	lg, err := logging.MustZapLogger(zapcore.Level(cfg.LogLevel))
+	if err != nil {
 		log.Fatal(err)
 	}
 
-	storage := storage.New()
+	strg, err := storage.NewFilePersistentMemory(ctx, cfg, &wg, lg)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	s, err := server.NewServer(
-		config,
-		storage,
-		service.New(storage),
+		ctx,
+		cfg,
+		strg,
+		service.New(strg),
+		lg,
 	)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	if err := s.Start(); err != nil {
-		panic(err)
-	}
+	s.Start(&wg)
+
+	wg.Wait()
 }

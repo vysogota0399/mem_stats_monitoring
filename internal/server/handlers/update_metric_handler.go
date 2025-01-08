@@ -19,10 +19,10 @@ type UpdateMetricHandler struct {
 	metricsUpdater metricsUpdater
 }
 
-func NewUpdateMetricHandler(storage storage.Storage) gin.HandlerFunc {
+func NewUpdateMetricHandler(strg storage.Storage) gin.HandlerFunc {
 	return updateMetricHandlerFunc(
 		&UpdateMetricHandler{
-			storage:        storage,
+			storage:        strg,
 			metricsUpdater: updateMetrics,
 		},
 	)
@@ -57,18 +57,18 @@ func updateMetricHandlerFunc(h *UpdateMetricHandler) gin.HandlerFunc {
 	}
 }
 
-func updateMetrics(m Metric, storage storage.Storage) error {
+func updateMetrics(m Metric, strg storage.Storage) error {
 	if m.Type != "gauge" && m.Type != "counter" {
 		return fmt.Errorf("update_metric_service: underfined metric type: %s", m.Type)
 	}
 
 	if m.Type == "gauge" {
-		err := processGauge(&m, storage)
+		err := processGauge(&m, strg)
 		if err != nil {
 			return err
 		}
 	} else {
-		err := processCounter(&m, storage)
+		err := processCounter(&m, strg)
 		if err != nil {
 			return err
 		}
@@ -77,13 +77,13 @@ func updateMetrics(m Metric, storage storage.Storage) error {
 	return nil
 }
 
-func processGauge(m *Metric, storage storage.Storage) error {
+func processGauge(m *Metric, strg storage.Storage) error {
 	g, err := newGauge(m)
 	if err != nil {
 		return err
 	}
 
-	rep := repositories.NewGauge(storage)
+	rep := repositories.NewGauge(strg)
 	if _, err := rep.Craete(g); err != nil {
 		return err
 	}
@@ -91,13 +91,13 @@ func processGauge(m *Metric, storage storage.Storage) error {
 	return nil
 }
 
-func processCounter(m *Metric, storage storage.Storage) error {
+func processCounter(m *Metric, strg storage.Storage) error {
 	c, err := newCounter(m)
 	if err != nil {
 		return err
 	}
 
-	rep := repositories.NewCounter(storage)
+	rep := repositories.NewCounter(strg)
 	if _, err := rep.Craete(c); err != nil {
 		return err
 	}

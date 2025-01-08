@@ -14,6 +14,8 @@ import (
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/service"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
+	"go.uber.org/zap/zapcore"
 )
 
 type succededSerice struct{}
@@ -87,10 +89,14 @@ func Test_updateRestMetricHandlerFunc(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			router := gin.Default()
 			s := storage.NewMemory()
+			lg, err := logging.MustZapLogger(zapcore.DebugLevel)
+			assert.NoError(t, err)
+
 			handler := updateRestMetricHandlerFunc(
 				&UpdateRestMetricHandler{
 					storage: s,
 					service: tt.args.service,
+					lg:      lg,
 				},
 			)
 

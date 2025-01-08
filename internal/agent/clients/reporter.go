@@ -14,37 +14,41 @@ import (
 
 	uuid "github.com/satori/go.uuid"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/models"
-	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
+	"go.uber.org/zap"
 )
 
 var ErrUnsuccessfulResponse error = errors.New("mem_stats_server: response not success")
 
 type compressor func(*bytes.Buffer) (*bytes.Buffer, error)
 type Reporter struct {
+	ctx        context.Context
 	client     *http.Client
 	address    string
-	logger     utils.Logger
+	lg         *logging.ZapLogger
 	compressor compressor
 }
 
-func NewReporter(address string) *Reporter {
+func NewReporter(ctx context.Context, address string, lg *logging.ZapLogger) *Reporter {
 	return &Reporter{
 		address: address,
 		client:  &http.Client{},
-		logger:  utils.InitLogger("[http]"),
+		lg:      lg,
+		ctx:     lg.WithContextFields(ctx, zap.String("name", "http")),
 	}
 }
 
-func NewCompReporter(address string) *Reporter {
+func NewCompReporter(ctx context.Context, address string, lg *logging.ZapLogger) *Reporter {
 	return &Reporter{
 		address:    address,
 		client:     &http.Client{},
-		logger:     utils.InitLogger("[http]"),
+		lg:         lg,
+		ctx:        lg.WithContextFields(ctx, zap.String("name", "http")),
 		compressor: gzbody,
 	}
 }
 
-func (c *Reporter) UpdateMetric(mType, mName, value string, requestID uuid.UUID) error {
+func (c *Reporter) UpdateMetric(ctx context.Context, mType, mName, value string) error {
 	body, err := c.prepareBody(mType, mName, value)
 	if err != nil {
 		return err
@@ -61,29 +65,23 @@ func (c *Reporter) UpdateMetric(mType, mName, value string, requestID uuid.UUID)
 	}
 
 	req.Header.Add("Content-Type", "application/json")
-	req.Header.Add("X-Request-ID", requestID.String())
+	req.Header.Add("X-Request-ID", uuid.NewV4().String())
 
-	resp, err := c.requestDo(req, requestID)
-
+	resp, err := c.requestDo(ctx, req)
 	if err != nil {
 		return fmt.Errorf("internal/agent/clients/reporter: send request err: %w", err)
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		return ErrUnsuccessfulResponse
 	}
 
-	defer resp.Body.Close()
-
 	return nil
 }
 
-func (c *Reporter) requestDo(req *http.Request, requestID uuid.UUID) (*http.Response, error) {
+func (c *Reporter) requestDo(ctx context.Context, req *http.Request) (*http.Response, error) {
 	start := time.Now()
-	c.logger.Printf("[%s] REQUEST BEGIN", requestID)
-	c.logger.Printf("[%s] %s %s", requestID, req.Method, req.URL)
-	c.logger.Printf("[%s] Headers: %v", requestID, req.Header)
-	defer c.logger.Printf("[%s] REQUEST END", requestID)
 
 	reader, err := req.GetBody()
 	if err != nil {
@@ -94,17 +92,20 @@ func (c *Reporter) requestDo(req *http.Request, requestID uuid.UUID) (*http.Resp
 	if err != nil {
 		return nil, err
 	}
-
-	c.logger.Printf("[%s] Body: %s", requestID, b)
-
 	resp, err := c.client.Do(req)
 	if err != nil {
-
 		return nil, err
 	}
 
-	c.logger.Printf("[%s] Duration: %v", requestID, time.Since(start))
-	c.logger.Printf("[%s] Response: %s", requestID, resp.Status)
+	c.lg.DebugCtx(ctx,
+		"request",
+		zap.String("method", req.Method),
+		zap.String("url", req.URL.String()),
+		zap.String("body", string(b)),
+		zap.Duration("duration", time.Since(start)),
+		zap.String("status", resp.Status),
+		zap.Any("headers", req.Header),
+	)
 
 	return resp, nil
 }

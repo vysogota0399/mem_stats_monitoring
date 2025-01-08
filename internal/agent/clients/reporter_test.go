@@ -5,10 +5,11 @@ import (
 	"net/http"
 	"testing"
 
-	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/models"
-	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
+	"go.uber.org/zap/zapcore"
+	"golang.org/x/net/context"
 )
 
 // RoundTripFunc .
@@ -24,10 +25,11 @@ func NewTestClient(fn RoundTripFunc) *Reporter {
 		Transport: fn,
 	}
 
+	lg, _ := logging.MustZapLogger(zapcore.DebugLevel)
 	return &Reporter{
 		address: "http://0.0.0.0:8080",
 		client:  testClient,
-		logger:  utils.InitLogger("[test]"),
+		lg:      lg,
 	}
 }
 
@@ -65,7 +67,7 @@ func TestNewReporter(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			client := NewTestClient(tt.ftransport)
 
-			assert.Equal(t, tt.err, client.UpdateMetric(models.CounterType, "baz", "1", uuid.NewV4()))
+			assert.Equal(t, tt.err, client.UpdateMetric(context.TODO(), models.CounterType, "baz", "1"))
 		})
 	}
 }

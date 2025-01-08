@@ -13,9 +13,9 @@ type Counter struct {
 	mType   string
 }
 
-func NewCounter(storage storage.Storage) Counter {
+func NewCounter(strg storage.Storage) Counter {
 	return Counter{
-		storage: storage,
+		storage: strg,
 		mType:   "counter",
 		Records: make([]models.Counter, 0),
 	}

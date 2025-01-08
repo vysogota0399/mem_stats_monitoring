@@ -13,9 +13,9 @@ type Gauge struct {
 	mType   string
 }
 
-func NewGauge(storage storage.Storage) Gauge {
+func NewGauge(strg storage.Storage) Gauge {
 	return Gauge{
-		storage: storage,
+		storage: strg,
 		mType:   "gauge",
 		Records: make([]models.Gauge, 0),
 	}
