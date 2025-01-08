@@ -5,6 +5,9 @@ import (
 	"log"
 )
 
+const GaugeType = "gauge"
+const CounterType = "counter"
+
 type Metric struct {
 	Name  string `json:"name"`
 	Type  string `json:"type"`

@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"sync"
-
-	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
 )
 
 type Storage interface {
@@ -28,12 +26,11 @@ var ErrNoRecords = errors.New("memory: no records error")
 //	}
 type Memory struct {
 	storage map[string]map[string][]string
-	logger  utils.Logger
 	mutex   sync.Mutex
 }
 
-func NewMemStorageWithData(storage map[string]map[string][]string, logger utils.Logger) *Memory {
-	return &Memory{storage: storage, logger: logger}
+func NewMemStorageWithData(storage map[string]map[string][]string) *Memory {
+	return &Memory{storage: storage}
 }
 
 func New() Storage {
@@ -42,7 +39,6 @@ func New() Storage {
 
 func NewMemory() *Memory {
 	return &Memory{
-		logger:  utils.InitLogger("[storage]"),
 		storage: make(map[string]map[string][]string),
 		mutex:   sync.Mutex{},
 	}
@@ -66,14 +62,11 @@ func (m *Memory) Push(mType, mName string, val any) error {
 
 	jsonVal, err := json.Marshal(val)
 	if err != nil {
-		m.logger.Printf("JSON marshal error: %v", err)
 		return err
 	}
 	strVal := string(jsonVal)
-	m.logger.Printf("Add %s to storage %s->%s", strVal, mType, mName)
 
 	mTypeStorage[mName] = append(valuesStorage, strVal)
-	m.logger.Printf("Storage updated: %v", m.storage)
 	return nil
 }
 

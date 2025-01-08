@@ -1,6 +1,10 @@
 package models
 
-import "fmt"
+import (
+	"fmt"
+)
+
+const GaugeType = "gauge"
 
 type Gauge struct {
 	Value float64 `json:"value"`

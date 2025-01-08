@@ -1,13 +1,17 @@
 package clients
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	uuid "github.com/satori/go.uuid"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
 )
 
@@ -24,10 +28,15 @@ func NewReporter(address string) *Reporter {
 }
 
 func (c *Reporter) UpdateMetric(mType, mName, value string, requestID uuid.UUID) error {
+	body, err := prepareBody(mType, mName, value)
+	if err != nil {
+		return err
+	}
+
 	req, err := http.NewRequestWithContext(
 		context.TODO(),
 		"POST", fmt.Sprintf("%s/update/%s/%s/%v", c.address, mType, mName, value),
-		http.NoBody,
+		body,
 	)
 
 	if err != nil {
@@ -35,6 +44,7 @@ func (c *Reporter) UpdateMetric(mType, mName, value string, requestID uuid.UUID)
 	}
 
 	req.Header.Add("Content-Type", "text/plain")
+	req.Header.Add("X-Request-ID", requestID.String())
 
 	resp, err := c.requestDo(req, requestID)
 
@@ -68,4 +78,64 @@ func (c *Reporter) requestDo(req *http.Request, requestID uuid.UUID) (*http.Resp
 	c.logger.Printf("[%s] REQUEST END", requestID)
 
 	return resp, nil
+}
+
+type MetricsBody struct {
+	MName string `json:"id"`              // имя метрики
+	MType string `json:"type"`            // параметр, принимающий значение gauge или counter
+	Delta string `json:"delta,omitempty"` // значение метрики в случае передачи counter
+	Value string `json:"value,omitempty"` // значение метрики в случае передачи gauge
+}
+
+func (m MetricsBody) MarshalJSON() ([]byte, error) {
+	type MetricsBodyAlias MetricsBody
+
+	aliasValue := struct {
+		MetricsBodyAlias
+		Delta int     `json:"delta,omitempty"` // значение метрики в случае передачи counter
+		Value float64 `json:"value,omitempty"`
+	}{
+		MetricsBodyAlias: MetricsBodyAlias(m),
+	}
+
+	if m.Value != "" {
+		if v, err := strconv.ParseFloat(m.Value, 64); err != nil {
+			return nil, err
+		} else {
+			aliasValue.Value = v
+		}
+	}
+
+	if m.Delta != "" {
+		if v, err := strconv.Atoi(m.Delta); err != nil {
+			return nil, err
+		} else {
+			aliasValue.Delta = v
+		}
+	}
+
+	return json.Marshal(aliasValue)
+}
+
+func prepareBody(mType, mName, value string) (*bytes.Buffer, error) {
+	rec := MetricsBody{
+		MName: mName,
+		MType: mType,
+	}
+
+	switch mType {
+	case models.GaugeType:
+		rec.Value = value
+	case models.CounterType:
+		rec.Delta = value
+	default:
+		return nil, fmt.Errorf("internal/agent/clients/reporter.go: underfined type %s", mType)
+	}
+
+	buff, err := json.Marshal(rec)
+	if err != nil {
+		return nil, err
+	}
+
+	return bytes.NewBuffer(buff), nil
 }

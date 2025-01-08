@@ -7,18 +7,15 @@ import (
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/repositories"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
-	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
 )
 
 type RootHandler struct {
-	logger  utils.Logger
 	storage storage.Storage
 }
 
-func NewRootHandler(storage storage.Storage, logger utils.Logger) gin.HandlerFunc {
+func NewRootHandler(storage storage.Storage) gin.HandlerFunc {
 	return RootHandlerFunc(
 		&RootHandler{
-			logger:  logger,
 			storage: storage,
 		},
 	)
@@ -49,7 +46,6 @@ func RootHandlerFunc(h *RootHandler) gin.HandlerFunc {
 			gaugeRecords = append(gaugeRecords, values[count-1])
 		}
 
-		h.logger.Printf("Gauge: %v\nCounter: %v", gaugeRecords, counterRecords)
 		c.HTML(http.StatusOK, "index.tmpl", gin.H{
 			"gauge":   gaugeRecords,
 			"counter": counterRecords,

@@ -7,7 +7,9 @@ import (
 )
 
 type Config struct {
-	Address string `env:"ADDRESS"`
+	Address  string `env:"ADDRESS"`
+	AppEnv   string `env:"APP_ENV" envDefault:"development"`
+	LogLevel string `env:"LOG_LEVEL" envDefault:"Info"`
 }
 
 func (c *Config) String() string {
