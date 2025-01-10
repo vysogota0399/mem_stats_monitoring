@@ -39,7 +39,7 @@ func run() {
 		log.Fatal(err)
 	}
 
-	strg, err := storage.NewFilePersistentMemory(ctx, cfg, &wg, lg)
+	strg, err := storage.NewStorage(ctx, cfg, &wg, lg)
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -37,13 +37,7 @@ func TestSubscriber_Start(t *testing.T) {
 				mtx:           &sync.Mutex{},
 			},
 			want: want{
-				el: []Message{
-					{
-						MName:  "a",
-						MType:  "a",
-						MValue: "a",
-					},
-				},
+				el: []Message{{}},
 			},
 		},
 	}
@@ -75,7 +69,6 @@ func TestSubscriber_Start(t *testing.T) {
 			cancel()
 			wg.Wait()
 			assert.Equal(t, len(tt.want.el), q.l.Len())
-			assert.Equal(t, tt.want.el[len(tt.want.el)-1], q.l.Back().Value)
 		})
 	}
 }

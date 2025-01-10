@@ -1,0 +1,35 @@
+x-app: &app
+  platform: linux/arm64
+  tty: true
+  stdin_open: true
+
+services:
+  server:
+    <<: *app
+    container_name: server
+    build:
+      context: ../
+      dockerfile: .docker/server/Dockerfile
+    command: go run cmd/server/main.go
+    environment:
+      - ADDRESS=0.0.0.0:8080
+      - LOG_LEVEL=-1
+      - DATABASE_DSN=postgres://postgres:secret@db:5432
+    volumes:
+      - ../:/app
+
+  db:
+    image: postgres:16-alpine
+    restart: always
+    shm_size: 128mb
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_PASSWORD: secret
+
+networks:
+  default:
+    name: mem-stats-monitoring-network
+
+volumes:
+  pg_data:

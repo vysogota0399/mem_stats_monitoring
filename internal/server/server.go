@@ -56,6 +56,7 @@ func (s *Server) Start(wg *sync.WaitGroup) {
 	s.router.POST("/update/", handlers.NewRestUpdateMetricHandler(s.storage, s.service, s.lg))
 	s.router.POST("/value/", handlers.NewShowRestMetricHandler(s.storage, s.lg))
 	s.router.GET("/value/:type/:name", handlers.NewShowMetricHandler(s.storage))
+	s.router.GET("/ping", handlers.NewPingHandler(s.storage, s.lg))
 	s.router.GET("/", handlers.NewRootHandler(s.storage))
 
 	s.lg.DebugCtx(s.ctx, "start", zap.String("config", s.config.String()))

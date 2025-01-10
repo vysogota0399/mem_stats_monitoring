@@ -1,8 +1,5 @@
 x-app: &app
   platform: linux/arm64
-  build:
-    context: ../
-    dockerfile: .docker/Dockerfile
   labels:
     logging: "promtail"
     logging_jobname: "containerlogs"
@@ -16,16 +13,24 @@ services:
   server:
     <<: *app
     container_name: server
+    build:
+      context: ../
+      dockerfile: .docker/server/Dockerfile
+    command: go run cmd/server/main.go
     environment:
       - ADDRESS=0.0.0.0:8080
       - LOG_LEVEL=-1
-    command: go run cmd/server/main.go
     volumes:
       - ../:/app
   
   agent:
     <<: *app
     container_name: agent
+    build:
+      context: ../
+      dockerfile: .docker/agent/Dockerfile
+    depends_on:
+      - server
     command: go run cmd/agent/main.go
     environment:
       - ADDRESS=server:8080
