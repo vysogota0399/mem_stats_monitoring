@@ -10,14 +10,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
-	"github.com/vysogota0399/mem_stats_monitoring/internal/mocks"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/server/mocks"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
 )
 
 type tmock func(*gomock.Controller) storage.Storage
 
-func OkPingMock(ctrl *gomock.Controller) storage.Storage {
+func okPingMock(ctrl *gomock.Controller) storage.Storage {
 	m := mocks.NewMockDBAble(ctrl)
 	m.EXPECT().Ping().Return(nil)
 	return m
@@ -39,7 +39,7 @@ func TestPingHandlerFunc(t *testing.T) {
 	}{
 		{
 			name: "when DBAble storage and ping returns no errors, then status 200",
-			strg: OkPingMock,
+			strg: okPingMock,
 			want: http.StatusOK,
 		},
 		{

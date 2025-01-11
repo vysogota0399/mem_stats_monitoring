@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -12,7 +13,7 @@ import (
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
 )
 
-type metricsUpdater func(m Metric, storage storage.Storage) error
+type metricsUpdater func(ctx context.Context, m Metric, storage storage.Storage) error
 
 type UpdateMetricHandler struct {
 	storage        storage.Storage
@@ -51,24 +52,24 @@ func updateMetricHandlerFunc(h *UpdateMetricHandler) gin.HandlerFunc {
 			Value: c.Param("value"),
 		}
 
-		if err := h.metricsUpdater(metric, h.storage); err != nil {
+		if err := h.metricsUpdater(c, metric, h.storage); err != nil {
 			c.AbortWithStatus(http.StatusBadRequest)
 		}
 	}
 }
 
-func updateMetrics(m Metric, strg storage.Storage) error {
+func updateMetrics(ctx context.Context, m Metric, strg storage.Storage) error {
 	if m.Type != "gauge" && m.Type != "counter" {
 		return fmt.Errorf("update_metric_service: underfined metric type: %s", m.Type)
 	}
 
 	if m.Type == "gauge" {
-		err := processGauge(&m, strg)
+		err := processGauge(ctx, &m, strg)
 		if err != nil {
 			return err
 		}
 	} else {
-		err := processCounter(&m, strg)
+		err := processCounter(ctx, &m, strg)
 		if err != nil {
 			return err
 		}
@@ -77,28 +78,28 @@ func updateMetrics(m Metric, strg storage.Storage) error {
 	return nil
 }
 
-func processGauge(m *Metric, strg storage.Storage) error {
+func processGauge(ctx context.Context, m *Metric, strg storage.Storage) error {
 	g, err := newGauge(m)
 	if err != nil {
 		return err
 	}
 
 	rep := repositories.NewGauge(strg)
-	if _, err := rep.Craete(g); err != nil {
+	if _, err := rep.Craete(ctx, &g); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func processCounter(m *Metric, strg storage.Storage) error {
+func processCounter(ctx context.Context, m *Metric, strg storage.Storage) error {
 	c, err := newCounter(m)
 	if err != nil {
 		return err
 	}
 
 	rep := repositories.NewCounter(strg)
-	if _, err := rep.Craete(c); err != nil {
+	if _, err := rep.Craete(ctx, &c); err != nil {
 		return err
 	}
 

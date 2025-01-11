@@ -1,6 +1,8 @@
 package repositories
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/models"
@@ -10,38 +12,93 @@ import (
 type Counter struct {
 	storage storage.Storage
 	Records []models.Counter
-	mType   string
 }
 
 func NewCounter(strg storage.Storage) Counter {
 	return Counter{
 		storage: strg,
-		mType:   "counter",
 		Records: make([]models.Counter, 0),
 	}
 }
 
-func (c *Counter) Craete(record models.Counter) (models.Counter, error) {
+func (c *Counter) Craete(ctx context.Context, record *models.Counter) (*models.Counter, error) {
 	var counter int64
-	last, err := c.Last(record.Name)
+	last, err := c.Last(ctx, record.Name)
 	if err != nil {
 		if err != storage.ErrNoRecords {
-			return record, err
+			return nil, err
 		}
 	} else {
 		counter = last.Value
 	}
 
 	record.Value += counter
-	if err := c.storage.Push(c.mType, record.Name, record); err != nil {
-		return record, err
+	if s, ok := c.storage.(storage.DBAble); ok {
+		return c.pushToDB(ctx, s, record)
+	}
+
+	if err := c.storage.Push(models.CounterType, record.Name, record); err != nil {
+		return nil, err
 	}
 
 	return record, nil
 }
 
-func (c Counter) Last(mName string) (*models.Counter, error) {
-	record, err := c.storage.Last(c.mType, mName)
+func (c *Counter) pushToDB(ctx context.Context, s storage.DBAble, rec *models.Counter) (*models.Counter, error) {
+	res, err := s.DB().ExecContext(
+		ctx,
+		`
+			insert into counters(name, value)
+			values ($1, %2)
+		`,
+		rec.Name,
+		rec.Value,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	id, err := res.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
+
+	rec.ID = id
+	return rec, nil
+}
+
+func (c Counter) Last(ctx context.Context, mName string) (*models.Counter, error) {
+	if s, ok := c.storage.(storage.DBAble); ok {
+		return c.lastFromDB(ctx, s, mName)
+	}
+
+	return c.lastFromMem(mName)
+}
+
+func (c Counter) lastFromDB(ctx context.Context, s storage.DBAble, mName string) (*models.Counter, error) {
+	row := s.DB().QueryRowContext(
+		ctx,
+		`
+		select value, id
+		from counters
+		where name = $1
+		order by created_at desc
+		limit 1`, mName)
+	cntr := &models.Counter{Name: mName}
+
+	if err := row.Scan(cntr.Value, cntr.ID); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, storage.ErrNoRecords
+		} else {
+			return nil, err
+		}
+	}
+
+	return cntr, nil
+}
+
+func (c Counter) lastFromMem(mName string) (*models.Counter, error) {
+	record, err := c.storage.Last(models.CounterType, mName)
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +114,7 @@ func (c Counter) Last(mName string) (*models.Counter, error) {
 
 func (c Counter) All() map[string][]models.Counter { //nolint:dupl // :/
 	records := map[string][]models.Counter{}
-	mNames, ok := c.storage.All()[c.mType]
+	mNames, ok := c.storage.All()[models.CounterType]
 	if !ok {
 		return records
 	}

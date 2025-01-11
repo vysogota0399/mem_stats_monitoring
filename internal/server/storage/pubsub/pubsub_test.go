@@ -37,7 +37,7 @@ func TestSubscriber_Start(t *testing.T) {
 				mtx:           &sync.Mutex{},
 			},
 			want: want{
-				el: []Message{{}},
+				el: []Message{},
 			},
 		},
 	}
