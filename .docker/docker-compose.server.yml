@@ -11,10 +11,8 @@ services:
       context: ../
       dockerfile: .docker/server/Dockerfile
     command: go run cmd/server/main.go
-    environment:
-      - ADDRESS=0.0.0.0:8080
-      - LOG_LEVEL=-1
-      - DATABASE_DSN=postgres://postgres:secret@db:5432
+    env_file:
+      - server/.env
     volumes:
       - ../:/app
 

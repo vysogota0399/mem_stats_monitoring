@@ -13,25 +13,24 @@ services:
   server:
     <<: *app
     container_name: server
+    command: go run cmd/server/main.go
     build:
       context: ../
       dockerfile: .docker/server/Dockerfile
-    command: go run cmd/server/main.go
-    environment:
-      - ADDRESS=0.0.0.0:8080
-      - LOG_LEVEL=-1
+    env_file:
+      - server/.env
     volumes:
       - ../:/app
   
   agent:
     <<: *app
     container_name: agent
+    command: go run cmd/agent/main.go
     build:
       context: ../
       dockerfile: .docker/agent/Dockerfile
     depends_on:
       - server
-    command: go run cmd/agent/main.go
     environment:
       - ADDRESS=server:8080
       - LOG_LEVEL=-1

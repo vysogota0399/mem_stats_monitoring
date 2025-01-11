@@ -78,7 +78,7 @@ tasks:
   start:
     desc: Start all services
     dir: .docker
-    cmd: docker compose up -d
+    cmd: docker compose up
 
   server-db:
     desc: Start server with db storage

@@ -54,6 +54,7 @@ func (s *Server) Start(wg *sync.WaitGroup) {
 	s.router.LoadHTMLGlob("internal/server/templates/*.tmpl")
 	s.router.POST("/update/:type/:name/:value", handlers.NewUpdateMetricHandler(s.storage))
 	s.router.POST("/update/", handlers.NewRestUpdateMetricHandler(s.storage, s.service, s.lg))
+	s.router.POST("/updates/", handlers.NewUpdatesRestMetricHandler(s.storage, s.service, s.lg))
 	s.router.POST("/value/", handlers.NewShowRestMetricHandler(s.storage, s.lg))
 	s.router.GET("/value/:type/:name", handlers.NewShowMetricHandler(s.storage))
 	s.router.GET("/ping", handlers.NewPingHandler(s.storage, s.lg))
