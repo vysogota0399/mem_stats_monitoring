@@ -30,7 +30,7 @@ func TestNewUpdateMetricHandler(t *testing.T) {
 			url:            "/update/gauge/TotalAlloc/0",
 			method:         http.MethodPost,
 			headers:        map[string]string{"Content-Type": "text/plain"},
-			metricsUpdater: func(m Metric, storage storage.Storage) error { return nil },
+			metricsUpdater: func(ctx context.Context, m Metric, storage storage.Storage) error { return nil },
 			want:           want{statusCode: http.StatusOK},
 		},
 		{
@@ -38,7 +38,7 @@ func TestNewUpdateMetricHandler(t *testing.T) {
 			url:            "/update/gauge/TotalAlloc/0",
 			method:         http.MethodGet,
 			headers:        map[string]string{"Content-Type": "text/plain"},
-			metricsUpdater: func(m Metric, storage storage.Storage) error { return nil },
+			metricsUpdater: func(ctx context.Context, m Metric, storage storage.Storage) error { return nil },
 			want:           want{statusCode: http.StatusNotFound},
 		},
 		{
@@ -46,7 +46,7 @@ func TestNewUpdateMetricHandler(t *testing.T) {
 			url:            "/update/0",
 			method:         http.MethodGet,
 			headers:        map[string]string{"Content-Type": "text/plain"},
-			metricsUpdater: func(m Metric, storage storage.Storage) error { return nil },
+			metricsUpdater: func(ctx context.Context, m Metric, storage storage.Storage) error { return nil },
 			want:           want{statusCode: http.StatusNotFound},
 		},
 		{
@@ -54,7 +54,7 @@ func TestNewUpdateMetricHandler(t *testing.T) {
 			url:            "/update/hist/TotalAlloc/0",
 			method:         http.MethodPost,
 			headers:        map[string]string{"Content-Type": "text/plain"},
-			metricsUpdater: func(m Metric, storage storage.Storage) error { return errors.New("error") },
+			metricsUpdater: func(ctx context.Context, m Metric, storage storage.Storage) error { return errors.New("error") },
 			want:           want{statusCode: http.StatusBadRequest},
 		},
 	}

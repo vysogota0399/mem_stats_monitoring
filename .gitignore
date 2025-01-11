@@ -25,3 +25,6 @@ vendor/
 .idea
 .vscode
 .DS_Store
+
+/.docker/server/.env
+/.docker/agent/.env

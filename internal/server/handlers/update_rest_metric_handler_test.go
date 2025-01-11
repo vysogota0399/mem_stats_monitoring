@@ -23,11 +23,11 @@ type failureSerice struct{}
 
 var expectedValue float64 = 1
 
-func (s succededSerice) Call(p service.UpdateMetricServiceParams) (service.UpdateMetricServiceResult, error) {
+func (s succededSerice) Call(ctx context.Context, p service.UpdateMetricServiceParams) (service.UpdateMetricServiceResult, error) {
 	return service.UpdateMetricServiceResult{Value: &expectedValue, MType: models.GaugeType, ID: "test"}, nil
 }
 
-func (s failureSerice) Call(p service.UpdateMetricServiceParams) (service.UpdateMetricServiceResult, error) {
+func (s failureSerice) Call(ctx context.Context, p service.UpdateMetricServiceParams) (service.UpdateMetricServiceResult, error) {
 	return service.UpdateMetricServiceResult{}, errors.New("error")
 }
 

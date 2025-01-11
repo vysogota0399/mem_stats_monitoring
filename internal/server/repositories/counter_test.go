@@ -1,6 +1,7 @@
 package repositories
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -36,9 +37,10 @@ func TestCreate(t *testing.T) {
 	for _, tt := range tasks {
 		t.Run(tt.name, func(t *testing.T) {
 			subject := NewCounter(tt.storage)
-			record, err := subject.Craete(tt.record)
+			record, err := subject.Craete(context.Background(), &tt.record)
 			assert.NoError(t, err)
-			assert.Equal(t, record, tt.wantsRecord)
+			assert.NotNil(t, record)
+			assert.Equal(t, tt.wantsRecord, *record)
 		})
 	}
 }
@@ -73,7 +75,7 @@ func TestLast(t *testing.T) {
 	for _, tt := range tasks {
 		t.Run(tt.name, func(t *testing.T) {
 			subject := NewCounter(tt.storage)
-			record, err := subject.Last(tt.searchName)
+			record, err := subject.Last(context.Background(), tt.searchName)
 			assert.Equal(t, record, tt.wantsRecord)
 			assert.Equal(t, err, tt.wantsError)
 		})
