@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/models"
@@ -26,26 +27,28 @@ type UpdateMetricServiceResult struct {
 	Value *float64 `json:"value,omitempty"`
 }
 
-func (s UpdateMetricService) Call(params UpdateMetricServiceParams) (UpdateMetricServiceResult, error) {
+func (s UpdateMetricService) Call(ctx context.Context, params UpdateMetricServiceParams) (UpdateMetricServiceResult, error) {
 	if params.MType == models.CounterType {
-		return s.createCounter(params)
+		return s.createCounter(ctx, params)
 	} else if params.MType == models.GaugeType {
-		return s.createGauge(params)
+		return s.createGauge(ctx, params)
 	}
 
 	return UpdateMetricServiceResult{}, fmt.Errorf("internal/server/service/update_metric_service.go: unexpected type(%s)", params.MType)
 }
 
-func (s UpdateMetricService) createCounter(params UpdateMetricServiceParams) (UpdateMetricServiceResult, error) {
+func (s UpdateMetricService) createCounter(ctx context.Context, params UpdateMetricServiceParams) (UpdateMetricServiceResult, error) {
 	var value int64
 	if params.Delta != nil {
 		value = *params.Delta
 	}
 
-	record, err := s.counterRep.Craete(models.Counter{
-		Name:  params.MName,
-		Value: value,
-	})
+	record, err := s.counterRep.Craete(
+		ctx,
+		&models.Counter{
+			Name:  params.MName,
+			Value: value,
+		})
 
 	if err != nil {
 		return UpdateMetricServiceResult{}, err
@@ -58,16 +61,18 @@ func (s UpdateMetricService) createCounter(params UpdateMetricServiceParams) (Up
 	}, nil
 }
 
-func (s UpdateMetricService) createGauge(params UpdateMetricServiceParams) (UpdateMetricServiceResult, error) {
+func (s UpdateMetricService) createGauge(ctx context.Context, params UpdateMetricServiceParams) (UpdateMetricServiceResult, error) {
 	var value float64
 	if params.Value != nil {
 		value = *params.Value
 	}
 
-	record, err := s.gaugeRep.Craete(models.Gauge{
-		Name:  params.MName,
-		Value: value,
-	})
+	record, err := s.gaugeRep.Craete(
+		ctx,
+		&models.Gauge{
+			Name:  params.MName,
+			Value: value,
+		})
 
 	if err != nil {
 		return UpdateMetricServiceResult{}, err

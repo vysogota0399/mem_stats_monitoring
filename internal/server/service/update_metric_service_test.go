@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -86,7 +87,7 @@ func TestUpdateMetricService_Call(t *testing.T) {
 				counterRep: counterRep,
 				gaugeRep:   gaugeRep,
 			}
-			res, err := serv.Call(tt.args)
+			res, err := serv.Call(context.Background(), tt.args)
 			assert.Equal(t, tt.wantErr, err != nil)
 			assert.Equal(t, tt.want, res)
 		})
