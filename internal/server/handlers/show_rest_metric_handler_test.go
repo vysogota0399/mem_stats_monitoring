@@ -35,8 +35,8 @@ func Test_showRestMetricHandlerFunc(t *testing.T) {
 	}
 
 	type args struct {
-		gaugeRepository   repositories.Gauge
-		counterRepository repositories.Counter
+		gaugeRepository   *repositories.Gauge
+		counterRepository *repositories.Counter
 		payload           []byte
 	}
 	type want struct {

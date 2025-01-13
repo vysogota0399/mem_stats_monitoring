@@ -15,8 +15,8 @@ const gauge string = "gauge"
 const counter string = "counter"
 
 type ShowMetricHandler struct {
-	gaugeRepository   repositories.Gauge
-	counterRepository repositories.Counter
+	gaugeRepository   *repositories.Gauge
+	counterRepository *repositories.Counter
 }
 
 func NewShowMetricHandler(strg storage.Storage) gin.HandlerFunc {

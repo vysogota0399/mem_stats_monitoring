@@ -17,8 +17,8 @@ import (
 )
 
 type ShowRestMetricHandler struct {
-	gaugeRepository   repositories.Gauge
-	counterRepository repositories.Counter
+	gaugeRepository   *repositories.Gauge
+	counterRepository *repositories.Counter
 	lg                *logging.ZapLogger
 }
 

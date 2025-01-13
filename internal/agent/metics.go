@@ -214,7 +214,7 @@ func (a *Agent) processMemMetrics(ctx context.Context) {
 		}
 
 		a.lg.DebugCtx(ctx, "new value", zap.Any("metric", record))
-		if err = a.storage.Set(&record); err != nil {
+		if err = a.storage.Set(ctx, &record); err != nil {
 			a.lg.ErrorCtx(ctx, "save value to storage error", zap.Any("metric", record), zap.Error(err))
 			continue
 		}
@@ -236,7 +236,7 @@ func (a *Agent) processCustomMetrics(ctx context.Context) {
 		}
 
 		a.lg.DebugCtx(ctx, "new value", zap.Any("metric", record))
-		if err = a.storage.Set(&record); err != nil {
+		if err = a.storage.Set(ctx, &record); err != nil {
 			a.lg.ErrorCtx(ctx, "save value to storage error", zap.Any("metric", record), zap.Error(err))
 			continue
 		}

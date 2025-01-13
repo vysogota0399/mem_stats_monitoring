@@ -18,6 +18,10 @@ type mockClient struct{}
 func (c *mockClient) UpdateMetric(ctx context.Context, mType, mName, value string) error {
 	return nil
 }
+
+func (c *mockClient) UpdateMetrics(ctx context.Context, b []*models.Metric) error {
+	return nil
+}
 func TestPollIteration(t *testing.T) {
 	cfg, err := config.NewConfig()
 	assert.NoError(t, err)
@@ -28,10 +32,9 @@ func TestPollIteration(t *testing.T) {
 	ctx := context.Background()
 
 	agent := NewAgent(
-		ctx,
 		lg,
 		cfg,
-		storage.NewMemoryStorage(ctx, lg),
+		storage.NewMemoryStorage(lg),
 	)
 	agent.httpClient = &mockClient{}
 
@@ -74,10 +77,9 @@ func TestReportIteration(t *testing.T) {
 	ctx := context.Background()
 
 	agent := NewAgent(
-		ctx,
 		lg,
 		cfg,
-		storage.NewMemoryStorage(ctx, lg),
+		storage.NewMemoryStorage(lg),
 	)
 	agent.httpClient = &mockClient{}
 	agent.memoryMetics = []MemMetric{}

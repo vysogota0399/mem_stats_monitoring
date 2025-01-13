@@ -7,7 +7,7 @@ import (
 const GaugeType = "gauge"
 
 type Gauge struct {
-	ID    int64   `json:"id,omitempty"`
+	ID    uint64  `json:"id,omitempty"`
 	Value float64 `json:"value"`
 	Name  string  `json:"name"`
 }

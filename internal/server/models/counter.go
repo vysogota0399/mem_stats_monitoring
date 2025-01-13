@@ -7,7 +7,7 @@ import (
 const CounterType = "counter"
 
 type Counter struct {
-	ID    int64  `json:"id,omitempty"`
+	ID    uint64 `json:"id,omitempty"`
 	Value int64  `json:"value"`
 	Name  string `json:"name"`
 }

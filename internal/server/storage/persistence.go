@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"log"
 	"os"
 	"sync"
 
@@ -90,6 +91,7 @@ func (m *PersistentMemory) Push(mType, mName string, val any) error {
 		message.MValue = gauge.Value
 	}
 
+	log.Printf("saveCollToMem %+v %T", message, message)
 	m.saveMessage(&message)
 
 	return nil

@@ -24,9 +24,8 @@ func main() {
 
 	ctx := context.Background()
 	agent.NewAgent(
-		ctx,
 		lg,
 		cfg,
-		storage.NewMemoryStorage(ctx, lg),
-	).Start()
+		storage.NewMemoryStorage(lg),
+	).Start(ctx)
 }

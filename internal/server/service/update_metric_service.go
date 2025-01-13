@@ -9,8 +9,8 @@ import (
 )
 
 type UpdateMetricService struct {
-	counterRep repositories.Counter
-	gaugeRep   repositories.Gauge
+	counterRep *repositories.Counter
+	gaugeRep   *repositories.Gauge
 }
 
 type UpdateMetricServiceParams struct {

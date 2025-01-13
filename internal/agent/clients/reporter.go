@@ -22,33 +22,31 @@ var ErrUnsuccessfulResponse error = errors.New("mem_stats_server: response not s
 
 type compressor func(*bytes.Buffer) (*bytes.Buffer, error)
 type Reporter struct {
-	ctx        context.Context
 	client     *http.Client
 	address    string
 	lg         *logging.ZapLogger
 	compressor compressor
 }
 
-func NewReporter(ctx context.Context, address string, lg *logging.ZapLogger) *Reporter {
+func NewReporter(address string, lg *logging.ZapLogger) *Reporter {
 	return &Reporter{
 		address: address,
 		client:  &http.Client{},
 		lg:      lg,
-		ctx:     lg.WithContextFields(ctx, zap.String("name", "http")),
 	}
 }
 
-func NewCompReporter(ctx context.Context, address string, lg *logging.ZapLogger) *Reporter {
+func NewCompReporter(address string, lg *logging.ZapLogger) *Reporter {
 	return &Reporter{
 		address:    address,
 		client:     &http.Client{},
 		lg:         lg,
-		ctx:        lg.WithContextFields(ctx, zap.String("name", "http")),
 		compressor: gzbody,
 	}
 }
 
 func (c *Reporter) UpdateMetric(ctx context.Context, mType, mName, value string) error {
+	ctx = c.lg.WithContextFields(ctx, zap.String("name", "http"))
 	body, err := c.prepareBody(mType, mName, value)
 	if err != nil {
 		return err
@@ -78,6 +76,62 @@ func (c *Reporter) UpdateMetric(ctx context.Context, mType, mName, value string)
 	}
 
 	return nil
+}
+
+func (c *Reporter) UpdateMetrics(ctx context.Context, data []*models.Metric) error {
+	var metricsBody []MetricsBody
+	for _, m := range data {
+		rec, err := generateMetric(m.Type, m.Name, m.Value)
+		if err != nil {
+			return err
+		}
+
+		metricsBody = append(metricsBody, *rec)
+	}
+
+	var body bytes.Buffer
+
+	if err := json.NewEncoder(&body).Encode(metricsBody); err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(
+		context.TODO(),
+		"POST", fmt.Sprintf("%s/updates/", c.address),
+		&body,
+	)
+
+	if err != nil {
+		return fmt.Errorf("internal/agent/clients/reporter: create request err: %w", err)
+	}
+
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("X-Request-ID", uuid.NewV4().String())
+	resp, err := c.requestDo(ctx, req)
+	if err != nil {
+		return fmt.Errorf("internal/agent/clients/reporter: send request err: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return ErrUnsuccessfulResponse
+	}
+
+	return nil
+}
+
+func generateMetric(mType, mName, mValue string) (*MetricsBody, error) {
+	rec := &MetricsBody{MName: mName, MType: mType}
+	switch mType {
+	case models.GaugeType:
+		rec.Value = mValue
+	case models.CounterType:
+		rec.Delta = mValue
+	default:
+		return nil, fmt.Errorf("internal/agent/clients/reporter.go: underfined type %s", mType)
+	}
+
+	return rec, nil
 }
 
 func (c *Reporter) requestDo(ctx context.Context, req *http.Request) (*http.Response, error) {
@@ -148,18 +202,9 @@ func (m MetricsBody) MarshalJSON() ([]byte, error) {
 }
 
 func (c Reporter) prepareBody(mType, mName, value string) (*bytes.Buffer, error) {
-	rec := MetricsBody{
-		MName: mName,
-		MType: mType,
-	}
-
-	switch mType {
-	case models.GaugeType:
-		rec.Value = value
-	case models.CounterType:
-		rec.Delta = value
-	default:
-		return nil, fmt.Errorf("internal/agent/clients/reporter.go: underfined type %s", mType)
+	rec, err := generateMetric(mType, mName, value)
+	if err != nil {
+		return nil, err
 	}
 	buff, err := json.Marshal(rec)
 	if err != nil {

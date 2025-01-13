@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -11,9 +12,13 @@ import (
 	"go.uber.org/zap"
 )
 
+type UpdateMetricsService interface {
+	Call(context.Context, service.UpdateMetricsServiceParams) (*service.UpdateMetricsServiceResult, error)
+}
+
 type UpdatesRestMetricHandler struct {
 	storage storage.Storage
-	service UpdateMetricService
+	service UpdateMetricsService
 	lg      *logging.ZapLogger
 }
 
@@ -21,28 +26,31 @@ func NewUpdatesRestMetricHandler(s storage.Storage, srvc *service.Service, lg *l
 	return updatesRestMetricHandlerFunc(
 		&UpdatesRestMetricHandler{
 			storage: s,
-			service: srvc.UpdateMetricService,
+			service: srvc.UpdateMetricsService,
 			lg:      lg,
 		},
 	)
 }
 
-type updatesReqSchema struct {
-	Metrics []Metrics
-}
-
 func updatesRestMetricHandlerFunc(h *UpdatesRestMetricHandler) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var reqSchema updatesReqSchema
+		var params service.UpdateMetricsServiceParams
 		ctx := utils.InitHandlerCtx(c, h.lg, "updates_rest_metrics_handler")
 		c.Writer.Header().Add("Content-Type", "application/json")
 
-		if err := c.ShouldBindJSON(&reqSchema); err != nil {
+		if err := c.ShouldBindJSON(&params); err != nil {
 			h.lg.DebugCtx(ctx, "invalid params", zap.Error(err))
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{})
 			return
 		}
 
-		
+		if _, err := h.service.Call(
+			ctx,
+			params,
+		); err != nil {
+			h.lg.ErrorCtx(ctx, "server error", zap.Error(err))
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{})
+			return
+		}
 	}
 }

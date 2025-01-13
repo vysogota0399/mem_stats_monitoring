@@ -15,8 +15,8 @@ type Gauge struct {
 	Records []models.Gauge
 }
 
-func NewGauge(strg storage.Storage) Gauge {
-	return Gauge{
+func NewGauge(strg storage.Storage) *Gauge {
+	return &Gauge{
 		storage: strg,
 		Records: make([]models.Gauge, 0),
 	}
@@ -66,7 +66,7 @@ func (g Gauge) lastFromDB(ctx context.Context, s storage.DBAble, mName string) (
 		select value, id
 		from gauges
 		where name = $1
-		order by created_at desc
+		order by id desc
 		limit 1`, mName)
 
 	gg := &models.Gauge{Name: mName}
@@ -116,4 +116,50 @@ func (g Gauge) All() map[string][]models.Gauge { //nolint:dupl // :/
 	}
 
 	return records
+}
+
+func (g *Gauge) SaveCollection(ctx context.Context, coll []models.Gauge) ([]models.Gauge, error) {
+	if s, ok := g.storage.(storage.DBAble); ok {
+		return g.saveCollToDB(ctx, s, coll)
+	}
+
+	return g.saveCollToMem(coll)
+}
+
+func (g *Gauge) saveCollToDB(ctx context.Context, s storage.DBAble, coll []models.Gauge) ([]models.Gauge, error) {
+	tx, err := s.DB().BeginTx(ctx, &sql.TxOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	defer tx.Commit()
+
+	for _, rec := range coll {
+		res := tx.QueryRowContext(
+			ctx,
+			`
+			insert into gauges(name, value)
+			values ($1, $2)
+			returning id
+			`,
+			rec.Name,
+			rec.Value,
+		)
+		if err := res.Scan(&rec.ID); err != nil {
+			tx.Rollback()
+			return nil, err
+		}
+	}
+
+	return coll, nil
+}
+
+func (g *Gauge) saveCollToMem(coll []models.Gauge) ([]models.Gauge, error) {
+	for _, rec := range coll {
+		if err := g.storage.Push(models.CounterType, rec.Name, &rec); err != nil {
+			return nil, err
+		}
+	}
+
+	return coll, nil
 }

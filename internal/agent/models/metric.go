@@ -2,7 +2,6 @@ package models
 
 import (
 	"encoding/json"
-	"log"
 )
 
 const GaugeType = "gauge"
@@ -17,7 +16,6 @@ type Metric struct {
 func (m Metric) String() string {
 	record, err := json.Marshal(m)
 	if err != nil {
-		log.Println("models/mitric: marshal err %w", err)
 		return ""
 	}
 
