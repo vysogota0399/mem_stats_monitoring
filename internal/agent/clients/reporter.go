@@ -14,6 +14,7 @@ import (
 
 	uuid "github.com/satori/go.uuid"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/models"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
 	"go.uber.org/zap"
 )
@@ -26,13 +27,15 @@ type Reporter struct {
 	address    string
 	lg         *logging.ZapLogger
 	compressor compressor
+	maxRetries uint8
 }
 
 func NewReporter(address string, lg *logging.ZapLogger) *Reporter {
 	return &Reporter{
-		address: address,
-		client:  &http.Client{},
-		lg:      lg,
+		address:    address,
+		client:     &http.Client{},
+		lg:         lg,
+		maxRetries: 4,
 	}
 }
 
@@ -42,6 +45,7 @@ func NewCompReporter(address string, lg *logging.ZapLogger) *Reporter {
 		client:     &http.Client{},
 		lg:         lg,
 		compressor: gzbody,
+		maxRetries: 4,
 	}
 }
 
@@ -65,7 +69,7 @@ func (c *Reporter) UpdateMetric(ctx context.Context, mType, mName, value string)
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("X-Request-ID", uuid.NewV4().String())
 
-	resp, err := c.requestDo(ctx, req)
+	resp, err := c.requestDo(ctx, req, 0)
 	if err != nil {
 		return fmt.Errorf("internal/agent/clients/reporter: send request err: %w", err)
 	}
@@ -107,7 +111,7 @@ func (c *Reporter) UpdateMetrics(ctx context.Context, data []*models.Metric) err
 
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("X-Request-ID", uuid.NewV4().String())
-	resp, err := c.requestDo(ctx, req)
+	resp, err := c.requestDo(ctx, req, 0)
 	if err != nil {
 		return fmt.Errorf("internal/agent/clients/reporter: send request err: %w", err)
 	}
@@ -134,7 +138,8 @@ func generateMetric(mType, mName, mValue string) (*MetricsBody, error) {
 	return rec, nil
 }
 
-func (c *Reporter) requestDo(ctx context.Context, req *http.Request) (*http.Response, error) {
+func (c *Reporter) requestDo(ctx context.Context, req *http.Request, atpt uint8) (*http.Response, error) {
+	atpt++
 	start := time.Now()
 
 	reader, err := req.GetBody()
@@ -148,6 +153,12 @@ func (c *Reporter) requestDo(ctx context.Context, req *http.Request) (*http.Resp
 	}
 	resp, err := c.client.Do(req)
 	if err != nil {
+		if atpt <= c.maxRetries {
+			c.lg.ErrorCtx(ctx, "request failed", zap.Uint8("current", atpt), zap.Uint8("max", c.maxRetries))
+			time.Sleep(time.Duration(utils.Delay(atpt)) * time.Second)
+			return c.requestDo(ctx, req, atpt)
+		}
+
 		return nil, err
 	}
 

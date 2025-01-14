@@ -4,20 +4,26 @@ import (
 	"context"
 	"database/sql"
 	"embed"
+	"errors"
 	"sync"
+	"time"
 
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/config"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
 	"go.uber.org/zap"
 )
 
 type DBStorage struct {
-	dbDsn string
-	db    *sql.DB
-	lg    *logging.ZapLogger
+	dbDsn          string
+	db             *sql.DB
+	lg             *logging.ZapLogger
+	maxOpenRetries uint8
 }
 
 func (s *DBStorage) All() map[string]map[string][]string {
@@ -52,24 +58,18 @@ type DBAble interface {
 const pgxDriver string = "pgx"
 
 func NewDBStorage(ctx context.Context, cfg config.Config, wg *sync.WaitGroup, lg *logging.ZapLogger) (Storage, error) {
-	db, err := sql.Open(pgxDriver, cfg.DatabaseDSN)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := db.Ping(); err != nil {
-		db.Close()
-		return nil, err
-	}
-
 	strg := &DBStorage{
-		lg:    lg,
-		dbDsn: cfg.DatabaseDSN,
-		db:    db,
+		lg:             lg,
+		dbDsn:          cfg.DatabaseDSN,
+		maxOpenRetries: 4,
+	}
+
+	if err := strg.openDB(0); err != nil {
+		return nil, err
 	}
 
 	if err := strg.migrate(); err != nil {
-		db.Close()
+		strg.db.Close()
 		return nil, err
 	}
 
@@ -79,7 +79,7 @@ func NewDBStorage(ctx context.Context, cfg config.Config, wg *sync.WaitGroup, lg
 		defer wg.Done()
 
 		<-ctx.Done()
-		if err := db.Close(); err != nil {
+		if err := strg.db.Close(); err != nil {
 			lg.FatalCtx(
 				ctx,
 				"close db failed",
@@ -89,6 +89,29 @@ func NewDBStorage(ctx context.Context, cfg config.Config, wg *sync.WaitGroup, lg
 	}()
 
 	return strg, nil
+}
+
+func (s *DBStorage) openDB(atpt uint8) error {
+	atpt++
+	db, err := sql.Open(pgxDriver, s.dbDsn)
+	if err != nil {
+		return err
+	}
+
+	if err := db.Ping(); err != nil {
+		db.Close()
+		var pgErr *pgconn.PgError
+
+		if errors.As(err, &pgErr) && pgerrcode.IsConnectionException(pgErr.Code) && atpt <= s.maxOpenRetries {
+			time.Sleep(time.Duration(utils.Delay(atpt)) * time.Second)
+			return s.openDB(atpt)
+		}
+
+		return err
+	}
+
+	s.db = db
+	return nil
 }
 
 //go:embed migrations/*.sql

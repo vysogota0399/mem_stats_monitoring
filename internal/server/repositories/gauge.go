@@ -39,7 +39,7 @@ func (g *Gauge) pushToDB(ctx context.Context, s storage.DBAble, r *models.Gauge)
 		ctx,
 		`
 			insert into gauges(name, value)
-			values ($1, %2)
+			values ($1, $2)
 			returning id
 		`,
 		r.Name,
