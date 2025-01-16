@@ -59,3 +59,28 @@ tasks:
       cmds:
         - golangci-lint run --config .golangci.yml
       silent: true
+
+  test:
+    desc: Run tests
+    dir: .docker
+    cmd: docker compose -f docker-compose.server.yml run --rm server go test -cover ./...
+
+  restart:
+    desc: Restart all services
+    dir: .docker
+    cmd: docker compose restart
+  
+  stop:
+    desc: Stop all services
+    dir: .docker
+    cmd: docker compose down
+
+  start:
+    desc: Start all services
+    dir: .docker
+    cmd: docker compose up
+
+  server-db:
+    desc: Start server with db storage
+    dir: .docker
+    cmd: docker compose -f docker-compose.server.yml up

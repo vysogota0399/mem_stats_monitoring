@@ -2,6 +2,7 @@ package utils
 
 import (
 	"context"
+	"math"
 
 	"github.com/gin-gonic/gin"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
@@ -18,4 +19,8 @@ func InitHandlerCtx(c *gin.Context, lg *logging.ZapLogger, handler string) conte
 	}
 
 	return lg.WithContextFields(ctx, zap.String("request_id", rid.(string)))
+}
+
+func Delay(i uint8) float64 {
+	return math.Exp(float64(i) / 2)
 }

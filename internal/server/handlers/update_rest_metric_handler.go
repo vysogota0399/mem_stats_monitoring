@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -20,7 +21,7 @@ type Metrics struct {
 }
 
 type UpdateMetricService interface {
-	Call(service.UpdateMetricServiceParams) (service.UpdateMetricServiceResult, error)
+	Call(context.Context, service.UpdateMetricServiceParams) (service.UpdateMetricServiceResult, error)
 }
 
 type UpdateRestMetricHandler struct {
@@ -51,6 +52,7 @@ func updateRestMetricHandlerFunc(h *UpdateRestMetricHandler) gin.HandlerFunc {
 		}
 
 		result, err := h.service.Call(
+			c,
 			service.UpdateMetricServiceParams{
 				MName: metric.ID,
 				MType: metric.MType,

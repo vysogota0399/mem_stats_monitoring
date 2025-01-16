@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"log"
 	"os"
 	"sync"
 
@@ -77,20 +78,20 @@ func (m *PersistentMemory) Push(mType, mName string, val any) error {
 	}
 
 	message := pubsub.Message{}
-
 	switch val := val.(type) {
-	case models.Counter:
+	case *models.Counter:
 		counter := val
 		message.MName = counter.Name
 		message.MType = models.CounterType
 		message.MValue = counter.Value
-	case models.Gauge:
+	case *models.Gauge:
 		gauge := val
 		message.MName = gauge.Name
 		message.MType = models.GaugeType
 		message.MValue = gauge.Value
 	}
 
+	log.Printf("saveCollToMem %+v %T", message, message)
 	m.saveMessage(&message)
 
 	return nil

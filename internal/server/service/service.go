@@ -6,12 +6,17 @@ import (
 )
 
 type Service struct {
-	UpdateMetricService UpdateMetricService
+	UpdateMetricService  *UpdateMetricService
+	UpdateMetricsService *UpdateMetricsService
 }
 
 func New(s storage.Storage) *Service {
 	return &Service{
-		UpdateMetricService: UpdateMetricService{
+		UpdateMetricService: &UpdateMetricService{
+			gaugeRep:   repositories.NewGauge(s),
+			counterRep: repositories.NewCounter(s),
+		},
+		UpdateMetricsService: &UpdateMetricsService{
 			gaugeRep:   repositories.NewGauge(s),
 			counterRep: repositories.NewCounter(s),
 		},

@@ -1,6 +1,7 @@
 package repositories
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -38,7 +39,7 @@ func TestGauge_Last(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewGauge(tt.args.storage)
-			got, err := g.Last(tt.args.mName)
+			got, err := g.Last(context.Background(), tt.args.mName)
 
 			assert.Equal(t, tt.want, got)
 			assert.Equal(t, tt.wantErr, err)

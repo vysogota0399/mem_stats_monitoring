@@ -1,0 +1,80 @@
+x-app: &app
+  platform: linux/arm64
+  labels:
+    logging: "promtail"
+    logging_jobname: "containerlogs"
+  depends_on:
+    - loki
+    - db
+  tty: true
+  stdin_open: true
+
+services:
+  server:
+    <<: *app
+    container_name: server
+    command: go run cmd/server/main.go
+    build:
+      context: ../
+      dockerfile: .docker/server/Dockerfile
+    env_file:
+      - server/.env
+    volumes:
+      - ../:/app
+  
+  agent:
+    <<: *app
+    container_name: agent
+    command: go run cmd/agent/main.go
+    build:
+      context: ../
+      dockerfile: .docker/agent/Dockerfile
+    depends_on:
+      - server
+    environment:
+      - ADDRESS=server:8080
+      - LOG_LEVEL=-1
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - 3000:3000
+    volumes:
+      - ./grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yaml
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+
+  loki:
+    image: grafana/loki:latest
+    ports:
+      - 3100:3100
+    command: -config.file=/etc/loki/local-config.yaml
+
+  promtail:
+    image:  grafana/promtail:latest
+    container_name: promtail_app
+    volumes:
+      - ./promtail/docker-config.yaml:/etc/promtail/docker-config.yaml
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: -config.file=/etc/promtail/docker-config.yaml
+    depends_on:
+      - loki
+
+  db:
+    image: postgres:16-alpine
+    restart: always
+    shm_size: 128mb
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_PASSWORD: secret
+
+networks:
+  default:
+    name: mem-stats-monitoring-network
+
+volumes:
+  pg_data:

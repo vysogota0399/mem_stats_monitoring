@@ -11,7 +11,7 @@ import (
 )
 
 func NewMemoryStorageWithData(storage map[string]map[string]string, lg *logging.ZapLogger) *Memory {
-	return &Memory{storage: storage, ctx: context.TODO(), lg: lg}
+	return &Memory{storage: storage, lg: lg}
 }
 
 func TestGet(t *testing.T) {
@@ -90,7 +90,7 @@ func TestSet(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			lg, _ := logging.MustZapLogger(zapcore.DebugLevel)
 			storage := NewMemoryStorageWithData(tt.data, lg)
-			assert.NoError(t, storage.Set(&tt.val))
+			assert.NoError(t, storage.Set(context.Background(), &tt.val))
 
 			actualValue := tt.data[tt.val.Type][tt.val.Name]
 			assert.Equal(t, tt.val.Value, actualValue)

@@ -29,14 +29,14 @@ func Test_showRestMetricHandlerFunc(t *testing.T) {
 		Value: expectedMValue,
 	}
 	rep := repositories.NewGauge(s)
-	_, err := rep.Craete(record)
+	_, err := rep.Craete(context.Background(), &record)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
 
 	type args struct {
-		gaugeRepository   repositories.Gauge
-		counterRepository repositories.Counter
+		gaugeRepository   *repositories.Gauge
+		counterRepository *repositories.Counter
 		payload           []byte
 	}
 	type want struct {

@@ -1,9 +1,13 @@
 package storage
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"sync"
+
+	"github.com/vysogota0399/mem_stats_monitoring/internal/server/config"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
 )
 
 type Storage interface {
@@ -35,6 +39,14 @@ func NewMemStorageWithData(storage map[string]map[string][]string) *Memory {
 
 func New() Storage {
 	return NewMemory()
+}
+
+func NewStorage(ctx context.Context, cfg config.Config, wg *sync.WaitGroup, lg *logging.ZapLogger) (Storage, error) {
+	if cfg.IsDBDSNPresent() {
+		return NewDBStorage(ctx, cfg, wg, lg)
+	} else {
+		return NewFilePersistentMemory(ctx, cfg, wg, lg)
+	}
 }
 
 func NewMemory() *Memory {

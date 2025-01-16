@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,8 +17,8 @@ import (
 )
 
 type ShowRestMetricHandler struct {
-	gaugeRepository   repositories.Gauge
-	counterRepository repositories.Counter
+	gaugeRepository   *repositories.Gauge
+	counterRepository *repositories.Counter
 	lg                *logging.ZapLogger
 }
 
@@ -55,7 +56,7 @@ func showRestMetricHandlerFunc(h *ShowRestMetricHandler) gin.HandlerFunc {
 			return
 		}
 
-		response, err := h.fetchMetic(params.MType, params.ID)
+		response, err := h.fetchMetic(c, params.MType, params.ID)
 		if err != nil {
 			if errors.Is(err, storage.ErrNoRecords) {
 				c.AbortWithStatusJSON(http.StatusNotFound, gin.H{})
@@ -74,10 +75,10 @@ func showRestMetricHandlerFunc(h *ShowRestMetricHandler) gin.HandlerFunc {
 	}
 }
 
-func (h *ShowRestMetricHandler) fetchMetic(mType, mName string) (showRestMetricResponse, error) {
+func (h *ShowRestMetricHandler) fetchMetic(ctx context.Context, mType, mName string) (showRestMetricResponse, error) {
 	switch mType {
 	case gauge:
-		record, err := h.gaugeRepository.Last(mName)
+		record, err := h.gaugeRepository.Last(ctx, mName)
 		if err != nil {
 			return showRestMetricResponse{}, err
 		}
@@ -88,7 +89,7 @@ func (h *ShowRestMetricHandler) fetchMetic(mType, mName string) (showRestMetricR
 			Value: &record.Value,
 		}, nil
 	case counter:
-		record, err := h.counterRepository.Last(mName)
+		record, err := h.counterRepository.Last(ctx, mName)
 		if err != nil {
 			return showRestMetricResponse{}, err
 		}

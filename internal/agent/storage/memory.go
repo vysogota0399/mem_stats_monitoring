@@ -15,28 +15,27 @@ var ErrNoRecords = errors.New("memory: no records error")
 
 type Storage interface {
 	Get(mType, mName string) (*models.Metric, error)
-	Set(m *models.Metric) error
+	Set(ctx context.Context, m *models.Metric) error
 }
 
 type Memory struct {
 	storage map[string]map[string]string
 	mutex   sync.Mutex
 	lg      *logging.ZapLogger
-	ctx     context.Context
 }
 
-func NewMemoryStorage(ctx context.Context, lg *logging.ZapLogger) *Memory {
+func NewMemoryStorage(lg *logging.ZapLogger) *Memory {
 	storage := make(map[string]map[string]string)
 
 	return &Memory{
-		ctx:     ctx,
 		lg:      lg,
 		storage: storage,
 		mutex:   sync.Mutex{},
 	}
 }
 
-func (s *Memory) Set(m *models.Metric) error {
+func (s *Memory) Set(ctx context.Context, m *models.Metric) error {
+	ctx = s.lg.WithContextFields(ctx, zap.String("name", "memoty_storage"))
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -46,7 +45,7 @@ func (s *Memory) Set(m *models.Metric) error {
 		s.storage[m.Type] = mTypeStorage
 	}
 
-	s.lg.DebugCtx(s.ctx,
+	s.lg.DebugCtx(ctx,
 		"add metric to storage",
 		zap.String("type", m.Type),
 		zap.String("name", m.Name),
