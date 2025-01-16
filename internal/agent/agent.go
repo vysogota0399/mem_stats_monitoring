@@ -35,7 +35,7 @@ func NewAgent(lg *logging.ZapLogger, cfg config.Config, store storage.Storage) *
 		lg:            lg,
 		storage:       store,
 		cfg:           cfg,
-		httpClient:    clients.NewCompReporter(cfg.ServerURL, lg),
+		httpClient:    clients.NewCompReporter(cfg.ServerURL, lg, &cfg),
 		memoryMetics:  memMetricsDefinition,
 		customMetrics: customMetricsDefinition,
 	}
@@ -130,10 +130,11 @@ func (a *Agent) ReportBatch(ctx context.Context) {
 
 	if len(batch) == 0 {
 		a.lg.DebugCtx(ctx, "batch is empty")
-	} else {
-		if err := a.httpClient.UpdateMetrics(ctx, batch); err != nil {
-			a.lg.ErrorCtx(ctx, "batch report failed error", zap.Error(err))
-		}
+		return
+	}
+
+	if err := a.httpClient.UpdateMetrics(ctx, batch); err != nil {
+		a.lg.ErrorCtx(ctx, "batch report failed error", zap.Error(err))
 	}
 
 	a.lg.DebugCtx(ctx, "finished")

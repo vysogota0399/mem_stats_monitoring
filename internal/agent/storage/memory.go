@@ -56,6 +56,9 @@ func (s *Memory) Set(ctx context.Context, m *models.Metric) error {
 }
 
 func (s *Memory) Get(mType, mName string) (*models.Metric, error) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
 	mTypeStorage, ok := s.storage[mType]
 	if !ok {
 		return nil, fmt.Errorf("storage/memory: Got type: %v, name: %v - type %w", mType, mName, ErrNoRecords)

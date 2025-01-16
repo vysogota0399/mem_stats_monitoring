@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"compress/flate"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,8 +16,10 @@ import (
 	"time"
 
 	uuid "github.com/satori/go.uuid"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/config"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/crypto"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
 	"go.uber.org/zap"
 )
@@ -22,12 +27,14 @@ import (
 var ErrUnsuccessfulResponse error = errors.New("mem_stats_server: response not success")
 
 type compressor func(*bytes.Buffer) (*bytes.Buffer, error)
+
 type Reporter struct {
 	client     *http.Client
 	address    string
 	lg         *logging.ZapLogger
 	compressor compressor
 	maxRetries uint8
+	secretKey  []byte
 }
 
 func NewReporter(address string, lg *logging.ZapLogger) *Reporter {
@@ -35,17 +42,18 @@ func NewReporter(address string, lg *logging.ZapLogger) *Reporter {
 		address:    address,
 		client:     &http.Client{},
 		lg:         lg,
-		maxRetries: 4,
+		maxRetries: 1,
 	}
 }
 
-func NewCompReporter(address string, lg *logging.ZapLogger) *Reporter {
+func NewCompReporter(address string, lg *logging.ZapLogger, cfg *config.Config) *Reporter {
 	return &Reporter{
 		address:    address,
 		client:     &http.Client{},
 		lg:         lg,
 		compressor: gzbody,
-		maxRetries: 4,
+		maxRetries: 1,
+		secretKey:  []byte(cfg.Key),
 	}
 }
 
@@ -138,6 +146,10 @@ func generateMetric(mType, mName, mValue string) (*MetricsBody, error) {
 	return rec, nil
 }
 
+type bodyKey string
+
+var bKey bodyKey = "body"
+
 func (c *Reporter) requestDo(ctx context.Context, req *http.Request, atpt uint8) (*http.Response, error) {
 	atpt++
 	start := time.Now()
@@ -151,10 +163,16 @@ func (c *Reporter) requestDo(ctx context.Context, req *http.Request, atpt uint8)
 	if err != nil {
 		return nil, err
 	}
+
+	ctx = context.WithValue(ctx, bKey, b)
+
+	if err := c.signRequest(ctx, req); err != nil {
+		return nil, err
+	}
+
 	resp, err := c.client.Do(req)
 	if err != nil {
 		if atpt <= c.maxRetries {
-			c.lg.ErrorCtx(ctx, "request failed", zap.Uint8("current", atpt), zap.Uint8("max", c.maxRetries))
 			time.Sleep(time.Duration(utils.Delay(atpt)) * time.Second)
 			return c.requestDo(ctx, req, atpt)
 		}
@@ -173,6 +191,29 @@ func (c *Reporter) requestDo(ctx context.Context, req *http.Request, atpt uint8)
 	)
 
 	return resp, nil
+}
+
+var ErrBodyKeyNotFoundInContext error = fmt.Errorf("internal/agent/clients/reporter.go there is no key %s in current context", bKey)
+var signHeaderKey string = "HashSHA256"
+
+func (c *Reporter) signRequest(ctx context.Context, r *http.Request) error {
+	if len(c.secretKey) == 0 {
+		return nil
+	}
+
+	b, ok := ctx.Value(bKey).([]byte)
+	if !ok {
+		return ErrBodyKeyNotFoundInContext
+	}
+
+	sign, err := crypto.NewCms(hmac.New(sha256.New, c.secretKey)).Sign(bytes.NewReader(b))
+	if err != nil {
+		return err
+	}
+
+	r.Header.Add(signHeaderKey, base64.StdEncoding.EncodeToString(sign))
+
+	return nil
 }
 
 type MetricsBody struct {
