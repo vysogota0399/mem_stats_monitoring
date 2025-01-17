@@ -2,6 +2,7 @@ package clients
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"testing"
 
@@ -9,7 +10,6 @@ import (
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
 	"go.uber.org/zap/zapcore"
-	"golang.org/x/net/context"
 )
 
 // RoundTripFunc .
@@ -117,6 +117,59 @@ func Test_prepareBody(t *testing.T) {
 			client := NewTestClient(func(req *http.Request) *http.Response { return nil })
 			_, err := client.prepareBody(tt.args.mType, tt.args.mName, tt.args.value)
 			assert.Equal(t, tt.wantErr, err != nil)
+		})
+	}
+}
+
+func TestReporter_signRequest(t *testing.T) {
+	type wants struct {
+		err           bool
+		signInHeaders bool
+	}
+	type fields struct {
+		reporter *Reporter
+		body     []byte
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		wants  wants
+	}{
+		{
+			name: "when key is empty",
+			wants: wants{
+				err:           false,
+				signInHeaders: false,
+			},
+			fields: fields{
+				reporter: &Reporter{},
+				body:     []byte{},
+			},
+		},
+		{
+			name: "when key is not empty, expect signature in headers",
+			wants: wants{
+				err:           false,
+				signInHeaders: true,
+			},
+			fields: fields{
+				reporter: &Reporter{secretKey: []byte("super secret key")},
+				body:     []byte(`{"fiz": "baz"}`),
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := tt.fields.reporter
+			tt.fields.reporter.lg, _ = logging.MustZapLogger(-1)
+			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "", bytes.NewBuffer(tt.fields.body))
+			assert.NoError(t, err)
+
+			err = r.signRequest(context.WithValue(context.Background(), bKey, tt.fields.body), req)
+			actuaSignKey := req.Header.Get(signHeaderKey)
+
+			assert.Equal(t, tt.wants.err, err != nil)
+			assert.Equal(t, tt.wants.signInHeaders, actuaSignKey != "")
 		})
 	}
 }

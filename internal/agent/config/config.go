@@ -14,6 +14,7 @@ type Config struct {
 	PollInterval   time.Duration `json:"poll_interval"`
 	ReportInterval time.Duration `json:"report_interval"`
 	LogLevel       int64         `json:"log_level" env:"LOG_LEVEL" envDefault:"0"`
+	Key            string        `json:"key" env:"KEY"`
 }
 
 func NewConfig() (Config, error) {
@@ -43,7 +44,11 @@ func NewConfig() (Config, error) {
 		}
 		c.LogLevel = llvl
 	} else {
-		c.LogLevel = 0
+		c.LogLevel = -1
+	}
+
+	if key, ok := os.LookupEnv("KEY"); ok {
+		c.Key = key
 	}
 
 	c.ServerURL = fmt.Sprintf("http://%s", c.ServerURL)
@@ -76,6 +81,10 @@ func (c *Config) parseFlags() {
 
 	if flag.Lookup("r") == nil {
 		flag.Int64Var(&reportInterval, "r", defaultReportIntercal, "Report interval")
+	}
+
+	if flag.Lookup("k") == nil {
+		flag.StringVar(&c.Key, "k", "", "Secret key form http request encryption")
 	}
 
 	flag.Parse()

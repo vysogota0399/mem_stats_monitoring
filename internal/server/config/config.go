@@ -16,6 +16,7 @@ type Config struct {
 	FileStoragePath string `json:"file_storage_path" env:"FILE_STORAGE_PATH" envDefault:"data/records.txt"`
 	Restore         bool   `json:"restore" env:"RESTORE" envDefault:"true"`
 	DatabaseDSN     string `json:"database_dsn" env:"DATABASE_DSN"`
+	Key             string `json:"key" env:"KEY"`
 }
 
 func (c Config) String() string {
@@ -42,6 +43,9 @@ func (c *Config) parseFlags() {
 	flag.StringVar(&c.FileStoragePath, "f", "data/records.txt", "data storage path")
 	flag.BoolVar(&c.Restore, "r", true, "flat - restore from file on boot")
 	flag.StringVar(&c.DatabaseDSN, "d", "", "database dsn")
+	if flag.Lookup("k") == nil {
+		flag.StringVar(&c.Key, "k", "", "Secret key form http request encryption")
+	}
 	flag.Parse()
 }
 
