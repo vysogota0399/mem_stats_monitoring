@@ -22,22 +22,26 @@ type httpClient interface {
 }
 
 type Agent struct {
-	lg            *logging.ZapLogger
-	storage       storage.Storage
-	cfg           config.Config
-	httpClient    httpClient
-	memoryMetics  []MemMetric
-	customMetrics []CustomMetric
+	lg                   *logging.ZapLogger
+	storage              storage.Storage
+	cfg                  config.Config
+	httpClient           httpClient
+	runtimeMetrics       []RuntimeMetric
+	customMetrics        []CustomMetric
+	virtualMemoryMetrics []VirtualMemoryMetric
+	cpuMetrics           []CpuMetric
 }
 
 func NewAgent(lg *logging.ZapLogger, cfg config.Config, store storage.Storage) *Agent {
 	return &Agent{
-		lg:            lg,
-		storage:       store,
-		cfg:           cfg,
-		httpClient:    clients.NewCompReporter(cfg.ServerURL, lg, &cfg),
-		memoryMetics:  memMetricsDefinition,
-		customMetrics: customMetricsDefinition,
+		lg:                   lg,
+		storage:              store,
+		cfg:                  cfg,
+		httpClient:           clients.NewCompReporter(cfg.ServerURL, lg, &cfg),
+		runtimeMetrics:       runtimeMetricsDefinition,
+		customMetrics:        customMetricsDefinition,
+		virtualMemoryMetrics: virtualMemoryMetricsDefinition,
+		cpuMetrics:           cpuMetricsDefinition,
 	}
 }
 func (a *Agent) Start(ctx context.Context) {
@@ -58,7 +62,7 @@ func (a *Agent) startPoller(ctx context.Context, wg *sync.WaitGroup) {
 
 		ctx := a.lg.WithContextFields(ctx, zap.String("actor", "poller"))
 		for {
-			a.PollIteration(ctx)
+			a.runPipe(ctx)
 			a.lg.DebugCtx(ctx, "sleep", zap.Duration("dur", a.cfg.PollInterval))
 			time.Sleep(a.cfg.PollInterval)
 		}
@@ -110,7 +114,7 @@ func (a *Agent) ReportBatch(ctx context.Context) {
 	a.lg.DebugCtx(ctx, "start")
 
 	batch := make([]*models.Metric, 0)
-	for _, m := range a.memoryMetics {
+	for _, m := range a.runtimeMetrics {
 		m, err := m.fromStore(a.storage)
 		if err != nil && !errors.Is(err, storage.ErrNoRecords) {
 			a.lg.ErrorCtx(ctx, "fetch metric failed error", zap.Error(err))
@@ -140,22 +144,13 @@ func (a *Agent) ReportBatch(ctx context.Context) {
 	a.lg.DebugCtx(ctx, "finished")
 }
 
-func (a *Agent) PollIteration(ctx context.Context) {
-	operationID := uuid.NewV4()
-	ctx = a.lg.WithContextFields(ctx, zap.String("operation_id", operationID.String()))
-	a.lg.DebugCtx(ctx, "start")
-	a.processMemMetrics(ctx)
-	a.processCustomMetrics(ctx)
-	a.lg.DebugCtx(ctx, "finished")
-}
-
 func (a Agent) ReportIteration(ctx context.Context) int {
 	var counter int
 	operationID := uuid.NewV4()
 	ctx = a.lg.WithContextFields(ctx, zap.String("operation_id", operationID.String()))
 	a.lg.DebugCtx(ctx, "start")
 
-	for _, m := range a.memoryMetics {
+	for _, m := range a.runtimeMetrics {
 		count, err := a.doReport(ctx, m)
 		if err != nil && !errors.Is(err, storage.ErrNoRecords) {
 			a.lg.ErrorCtx(ctx, "report mem metrics failed", zap.Error(err))

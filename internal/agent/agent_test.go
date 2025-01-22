@@ -38,7 +38,7 @@ func TestPollIteration(t *testing.T) {
 	)
 	agent.httpClient = &mockClient{}
 
-	agent.memoryMetics = []MemMetric{
+	agent.runtimeMetrics = []MemMetric{
 		{
 			Name: "Alloc", Type: "gauge",
 			generateValue: func(stat *runtime.MemStats) any { return uint64(0) },
@@ -82,7 +82,7 @@ func TestReportIteration(t *testing.T) {
 		storage.NewMemoryStorage(lg),
 	)
 	agent.httpClient = &mockClient{}
-	agent.memoryMetics = []MemMetric{}
+	agent.runtimeMetrics = []MemMetric{}
 
 	agent.PollIteration(ctx)
 	result := agent.ReportIteration(ctx)
