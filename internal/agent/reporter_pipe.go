@@ -125,10 +125,11 @@ func (a *Agent) report(
 			case <-ctx.Done():
 				return nil
 			default:
-				if err := a.httpClient.UpdateMetric(ctx, m.Type, m.Name, m.Value); err != nil {
-					return fmt.Errorf("internal/agent/reporter_pipe singele metric report failed error %w", err)
-				}
-
+				g.Go(
+					func() error {
+						return a.httpClient.UpdateMetric(ctx, m.Type, m.Name, m.Value)
+					},
+				)
 				batch = append(batch, m)
 			}
 		}
@@ -137,9 +138,11 @@ func (a *Agent) report(
 			return nil
 		}
 
-		if err := a.httpClient.UpdateMetrics(ctx, batch); err != nil {
-			return fmt.Errorf("internal/agent/reporter_pipe batch report failed error %w", err)
-		}
+		g.Go(
+			func() error {
+				return a.httpClient.UpdateMetrics(ctx, batch)
+			},
+		)
 
 		return nil
 	})

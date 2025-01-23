@@ -66,7 +66,7 @@ func (a *Agent) genMetrics(ctx context.Context, g *errgroup.Group) chan *models.
 	a.genCustromMetrics(ctx, &wg, g, metrics)
 	a.genVirtualMemoryMetrics(ctx, &wg, g, metrics)
 	a.genRuntimeMetrics(ctx, &wg, g, metrics)
-	a.genCpuMetrics(ctx, &wg, g, metrics)
+	a.genCPUMetrics(ctx, &wg, g, metrics)
 
 	go func() {
 		wg.Wait()
@@ -76,7 +76,7 @@ func (a *Agent) genMetrics(ctx context.Context, g *errgroup.Group) chan *models.
 	return metrics
 }
 
-func (a *Agent) genCpuMetrics(
+func (a *Agent) genCPUMetrics(
 	ctx context.Context,
 	wg *sync.WaitGroup,
 	g *errgroup.Group,

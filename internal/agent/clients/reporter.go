@@ -35,6 +35,7 @@ type Reporter struct {
 	compressor compressor
 	maxRetries uint8
 	secretKey  []byte
+	semaphore  *semaphore
 }
 
 func NewReporter(address string, lg *logging.ZapLogger) *Reporter {
@@ -46,6 +47,24 @@ func NewReporter(address string, lg *logging.ZapLogger) *Reporter {
 	}
 }
 
+type semaphore struct {
+	semaCh chan struct{}
+}
+
+func (s *semaphore) Acquire() {
+	s.semaCh <- struct{}{}
+}
+
+func (s *semaphore) Release() {
+	<-s.semaCh
+}
+
+func NewSemaphore(maxReq int) *semaphore {
+	return &semaphore{
+		semaCh: make(chan struct{}, maxReq),
+	}
+}
+
 func NewCompReporter(address string, lg *logging.ZapLogger, cfg *config.Config) *Reporter {
 	return &Reporter{
 		address:    address,
@@ -54,6 +73,7 @@ func NewCompReporter(address string, lg *logging.ZapLogger, cfg *config.Config) 
 		compressor: gzbody,
 		maxRetries: 5,
 		secretKey:  []byte(cfg.Key),
+		semaphore:  NewSemaphore(cfg.RateLimit),
 	}
 }
 
@@ -154,6 +174,9 @@ func (c *Reporter) requestDo(ctx context.Context, req *http.Request) (*http.Resp
 	resCh := make(chan *http.Response, c.maxRetries)
 	errCh := make(chan error)
 	doRequest := func(ctx context.Context, req *http.Request, resChan chan *http.Response, errChan chan error) {
+		c.semaphore.Acquire()
+		defer c.semaphore.Release()
+
 		start := time.Now()
 		reader, err := req.GetBody()
 		if err != nil {
@@ -179,6 +202,7 @@ func (c *Reporter) requestDo(ctx context.Context, req *http.Request) (*http.Resp
 			errChan <- fmt.Errorf("internal/agent/clients/reporter send request error %w", err)
 			return
 		}
+		defer resp.Body.Close()
 
 		c.lg.DebugCtx(ctx,
 			"request",
@@ -204,7 +228,7 @@ func (c *Reporter) requestDo(ctx context.Context, req *http.Request) (*http.Resp
 		case res := <-resCh:
 			return res, nil
 		case err = <-errCh:
-			c.lg.DebugCtx(ctx, "wait next", zap.Int("total", int(c.maxRetries)), zap.Int("current", i))
+			c.lg.DebugCtx(ctx, "wait next", zap.Int("total", int(c.maxRetries)), zap.Int("current", i+1))
 			time.Sleep(time.Duration(utils.Delay(uint8(i))) * time.Second)
 			go doRequest(ctx, req, resCh, errCh)
 		}

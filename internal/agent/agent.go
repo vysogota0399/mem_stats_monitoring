@@ -85,7 +85,6 @@ func (a Agent) startReporter(ctx context.Context, wg *sync.WaitGroup) {
 			case <-time.NewTicker(a.cfg.ReportInterval).C:
 				a.runReporterPipe(ctx)
 				a.lg.DebugCtx(ctx, "sleep", zap.Duration("dur", a.cfg.PollInterval))
-				time.Sleep(a.cfg.ReportInterval)
 			}
 		}
 	}()
