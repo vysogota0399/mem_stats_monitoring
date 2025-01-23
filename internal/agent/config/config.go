@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"runtime"
 	"strconv"
 	"time"
 )
@@ -15,6 +16,7 @@ type Config struct {
 	ReportInterval time.Duration `json:"report_interval"`
 	LogLevel       int64         `json:"log_level" env:"LOG_LEVEL" envDefault:"0"`
 	Key            string        `json:"key" env:"KEY"`
+	RateLimit      int           `json:"rate_limit" env:"RATE_LIMIT"`
 }
 
 func NewConfig() (Config, error) {
@@ -51,6 +53,14 @@ func NewConfig() (Config, error) {
 		c.Key = key
 	}
 
+	if val, ok := os.LookupEnv("RATE_LIMIT"); ok {
+		rLimit, err := strconv.ParseInt(val, 10, 8)
+		if err != nil {
+			return c, err
+		}
+		c.RateLimit = int(rLimit)
+	}
+
 	c.ServerURL = fmt.Sprintf("http://%s", c.ServerURL)
 	return c, nil
 }
@@ -85,6 +95,10 @@ func (c *Config) parseFlags() {
 
 	if flag.Lookup("k") == nil {
 		flag.StringVar(&c.Key, "k", "", "Secret key form http request encryption")
+	}
+
+	if flag.Lookup("l") == nil {
+		flag.IntVar(&c.RateLimit, "l", runtime.GOMAXPROCS(0), "Reporter worker pool limit")
 	}
 
 	flag.Parse()

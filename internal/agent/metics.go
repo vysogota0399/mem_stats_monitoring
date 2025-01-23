@@ -1,10 +1,8 @@
 package agent
 
 import (
-	"context"
 	"crypto/rand"
 	"errors"
-	"fmt"
 	"math/big"
 	"runtime"
 	"strconv"
@@ -13,7 +11,6 @@ import (
 	"github.com/shirou/gopsutil/v4/mem"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/storage"
-	"go.uber.org/zap"
 )
 
 type MemValueGenerator func(*runtime.MemStats) any
@@ -205,6 +202,10 @@ type VirtualMemoryMetric struct {
 	generateValue func(*mem.VirtualMemoryStat) uint64
 }
 
+func (c VirtualMemoryMetric) fromStore(s storage.Storage) (*models.Metric, error) {
+	return s.Get(c.Type, c.Name)
+}
+
 var virtualMemoryMetricsDefinition = []VirtualMemoryMetric{
 	{
 		Name: "TotalMemory", Type: "gauge",
@@ -216,13 +217,17 @@ var virtualMemoryMetricsDefinition = []VirtualMemoryMetric{
 	},
 }
 
-type CpuMetric struct {
+type CPUMetric struct {
 	Name          string
 	Type          string
 	generateValue func([]cpu.InfoStat) int32
 }
 
-var cpuMetricsDefinition = []CpuMetric{
+func (c CPUMetric) fromStore(s storage.Storage) (*models.Metric, error) {
+	return s.Get(c.Type, c.Name)
+}
+
+var cpuMetricsDefinition = []CPUMetric{
 	{
 		Name: "CPUutilization1", Type: "gauge",
 		generateValue: func(stat []cpu.InfoStat) int32 {
@@ -234,50 +239,4 @@ var cpuMetricsDefinition = []CpuMetric{
 			return sum
 		},
 	},
-}
-
-func (a *Agent) processRuntimeMetrics(ctx context.Context) {
-	memStat := runtime.MemStats{}
-	runtime.ReadMemStats(&memStat)
-
-	for _, m := range a.runtimeMetrics {
-		val, err := convertToStr(m.generateValue(&memStat))
-		if err != nil {
-			a.lg.ErrorCtx(ctx, "convert to str error", zap.Error(err))
-			continue
-		}
-		record := models.Metric{
-			Name:  m.Name,
-			Type:  m.Type,
-			Value: val,
-		}
-
-		a.lg.DebugCtx(ctx, "new value", zap.Any("metric", record))
-		if err = a.storage.Set(ctx, &record); err != nil {
-			a.lg.ErrorCtx(ctx, "save value to storage error", zap.Any("metric", record), zap.Error(err))
-			continue
-		}
-	}
-}
-
-func (a *Agent) processCustomMetrics(ctx context.Context) {
-	for _, m := range a.customMetrics {
-		val, err := m.generateValue(&m, a)
-		if err != nil {
-			a.lg.ErrorCtx(ctx, "generate value error", zap.Error(err))
-			continue
-		}
-
-		record := models.Metric{
-			Name:  m.Name,
-			Type:  m.Type,
-			Value: fmt.Sprintf("%v", val),
-		}
-
-		a.lg.DebugCtx(ctx, "new value", zap.Any("metric", record))
-		if err = a.storage.Set(ctx, &record); err != nil {
-			a.lg.ErrorCtx(ctx, "save value to storage error", zap.Any("metric", record), zap.Error(err))
-			continue
-		}
-	}
 }

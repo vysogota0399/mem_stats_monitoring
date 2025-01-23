@@ -42,7 +42,7 @@ func NewReporter(address string, lg *logging.ZapLogger) *Reporter {
 		address:    address,
 		client:     &http.Client{},
 		lg:         lg,
-		maxRetries: 1,
+		maxRetries: 5,
 	}
 }
 
@@ -52,7 +52,7 @@ func NewCompReporter(address string, lg *logging.ZapLogger, cfg *config.Config) 
 		client:     &http.Client{},
 		lg:         lg,
 		compressor: gzbody,
-		maxRetries: 1,
+		maxRetries: 5,
 		secretKey:  []byte(cfg.Key),
 	}
 }
@@ -77,7 +77,7 @@ func (c *Reporter) UpdateMetric(ctx context.Context, mType, mName, value string)
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("X-Request-ID", uuid.NewV4().String())
 
-	resp, err := c.requestDo(ctx, req, 0)
+	resp, err := c.requestDo(ctx, req)
 	if err != nil {
 		return fmt.Errorf("internal/agent/clients/reporter: send request err: %w", err)
 	}
@@ -119,7 +119,7 @@ func (c *Reporter) UpdateMetrics(ctx context.Context, data []*models.Metric) err
 
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("X-Request-ID", uuid.NewV4().String())
-	resp, err := c.requestDo(ctx, req, 0)
+	resp, err := c.requestDo(ctx, req)
 	if err != nil {
 		return fmt.Errorf("internal/agent/clients/reporter: send request err: %w", err)
 	}
@@ -150,47 +150,67 @@ type bodyKey string
 
 var bKey bodyKey = "body"
 
-func (c *Reporter) requestDo(ctx context.Context, req *http.Request, atpt uint8) (*http.Response, error) {
-	atpt++
-	start := time.Now()
-
-	reader, err := req.GetBody()
-	if err != nil {
-		return nil, err
-	}
-
-	b, err := io.ReadAll(reader)
-	if err != nil {
-		return nil, err
-	}
-
-	ctx = context.WithValue(ctx, bKey, b)
-
-	if err := c.signRequest(ctx, req); err != nil {
-		return nil, err
-	}
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		if atpt <= c.maxRetries {
-			time.Sleep(time.Duration(utils.Delay(atpt)) * time.Second)
-			return c.requestDo(ctx, req, atpt)
+func (c *Reporter) requestDo(ctx context.Context, req *http.Request) (*http.Response, error) {
+	resCh := make(chan *http.Response, c.maxRetries)
+	errCh := make(chan error)
+	doRequest := func(ctx context.Context, req *http.Request, resChan chan *http.Response, errChan chan error) {
+		start := time.Now()
+		reader, err := req.GetBody()
+		if err != nil {
+			errChan <- fmt.Errorf("internal/agent/clients/reporter get body reader error %w", err)
+			return
 		}
 
-		return nil, err
+		b, err := io.ReadAll(reader)
+		if err != nil {
+			errChan <- fmt.Errorf("internal/agent/clients/reporter read body error %w", err)
+			return
+		}
+
+		ctx = context.WithValue(ctx, bKey, b)
+
+		if err := c.signRequest(ctx, req); err != nil {
+			errChan <- fmt.Errorf("internal/agent/clients/reporter sign request error %w", err)
+			return
+		}
+
+		resp, err := c.client.Do(req)
+		if err != nil {
+			errChan <- fmt.Errorf("internal/agent/clients/reporter send request error %w", err)
+			return
+		}
+
+		c.lg.DebugCtx(ctx,
+			"request",
+			zap.String("method", req.Method),
+			zap.String("url", req.URL.String()),
+			zap.String("body", string(b)),
+			zap.Duration("duration", time.Since(start)),
+			zap.String("status", resp.Status),
+			zap.Any("headers", req.Header),
+		)
+
+		resChan <- resp
 	}
 
-	c.lg.DebugCtx(ctx,
-		"request",
-		zap.String("method", req.Method),
-		zap.String("url", req.URL.String()),
-		zap.String("body", string(b)),
-		zap.Duration("duration", time.Since(start)),
-		zap.String("status", resp.Status),
-		zap.Any("headers", req.Header),
-	)
+	var err error
 
-	return resp, nil
+	go doRequest(ctx, req, resCh, errCh)
+
+	for i := 0; i < int(c.maxRetries); i++ {
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("internal/agent/clients/reporter context canceled")
+		case res := <-resCh:
+			return res, nil
+		case err = <-errCh:
+			c.lg.DebugCtx(ctx, "wait next", zap.Int("total", int(c.maxRetries)), zap.Int("current", i))
+			time.Sleep(time.Duration(utils.Delay(uint8(i))) * time.Second)
+			go doRequest(ctx, req, resCh, errCh)
+		}
+	}
+
+	return nil, err
 }
 
 var ErrBodyKeyNotFoundInContext error = fmt.Errorf("internal/agent/clients/reporter.go there is no key %s in current context", bKey)
