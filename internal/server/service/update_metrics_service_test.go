@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"math/rand"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -104,5 +105,33 @@ func TestUpdateMetricsService_Call(t *testing.T) {
 
 			assert.Equal(t, tt.want, got)
 		})
+	}
+}
+
+func BenchmarkUpdateMetricsService_Call(b *testing.B) {
+	ctrl := gomock.NewController(b)
+	defer ctrl.Finish()
+
+	counterRep := mocks.NewMockCntrRep(ctrl)
+	gaugeRep := mocks.NewMockGGRep(ctrl)
+
+	s := &UpdateMetricsService{
+		counterRep: counterRep,
+		gaugeRep:   gaugeRep,
+	}
+
+	ctx := context.Background()
+	mCount := 100
+	input := make([]UpdateMetricsServiceEl, mCount)
+	mtype := []string{models.CounterType, models.GaugeType}
+	for i := range mCount {
+		input[i] = UpdateMetricsServiceEl{MType: mtype[rand.Int31n(2)]}
+	}
+
+	for b.Loop() {
+		counterRep.EXPECT().SaveCollection(ctx, gomock.Any()).Return([]models.Counter{}, nil)
+		gaugeRep.EXPECT().SaveCollection(ctx, gomock.Any()).Return([]models.Gauge{}, nil)
+
+		s.Call(ctx, UpdateMetricsServiceParams(input))
 	}
 }

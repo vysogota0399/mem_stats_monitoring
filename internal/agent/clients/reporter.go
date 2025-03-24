@@ -28,8 +28,12 @@ var ErrUnsuccessfulResponse error = errors.New("mem_stats_server: response not s
 
 type compressor func(*bytes.Buffer) (*bytes.Buffer, error)
 
+type Requester interface {
+	Request(r *http.Request) (*http.Response, error)
+}
+
 type Reporter struct {
-	client     *http.Client
+	client     Requester
 	address    string
 	lg         *logging.ZapLogger
 	compressor compressor
@@ -38,10 +42,10 @@ type Reporter struct {
 	semaphore  *semaphore
 }
 
-func NewReporter(address string, lg *logging.ZapLogger) *Reporter {
+func NewReporter(address string, lg *logging.ZapLogger, client Requester) *Reporter {
 	return &Reporter{
 		address:    address,
-		client:     &http.Client{},
+		client:     client,
 		lg:         lg,
 		maxRetries: 5,
 	}
@@ -65,10 +69,10 @@ func NewSemaphore(maxReq int) *semaphore {
 	}
 }
 
-func NewCompReporter(address string, lg *logging.ZapLogger, cfg *config.Config) *Reporter {
+func NewCompReporter(address string, lg *logging.ZapLogger, cfg *config.Config, client Requester) *Reporter {
 	return &Reporter{
 		address:    address,
-		client:     &http.Client{},
+		client:     client,
 		lg:         lg,
 		compressor: gzbody,
 		maxRetries: 5,
@@ -197,7 +201,7 @@ func (c *Reporter) requestDo(ctx context.Context, req *http.Request) (*http.Resp
 			return
 		}
 
-		resp, err := c.client.Do(req)
+		resp, err := c.client.Request(req)
 		if err != nil {
 			errChan <- fmt.Errorf("internal/agent/clients/reporter send request error %w", err)
 			return

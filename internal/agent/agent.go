@@ -3,6 +3,8 @@ package agent
 import (
 	"context"
 	"fmt"
+	"os"
+	"runtime/pprof"
 	"sync"
 	"time"
 
@@ -35,7 +37,7 @@ func NewAgent(lg *logging.ZapLogger, cfg config.Config, store storage.Storage) *
 		lg:                   lg,
 		storage:              store,
 		cfg:                  cfg,
-		httpClient:           clients.NewCompReporter(cfg.ServerURL, lg, &cfg),
+		httpClient:           clients.NewCompReporter(cfg.ServerURL, lg, &cfg, clients.NewDefaulut()),
 		runtimeMetrics:       runtimeMetricsDefinition,
 		customMetrics:        customMetricsDefinition,
 		virtualMemoryMetrics: virtualMemoryMetricsDefinition,
@@ -43,12 +45,50 @@ func NewAgent(lg *logging.ZapLogger, cfg config.Config, store storage.Storage) *
 	}
 }
 func (a *Agent) Start(ctx context.Context) {
+	wg := sync.WaitGroup{}
+	a.startProfile(ctx, &wg)
+
 	ctx = a.lg.WithContextFields(ctx, zap.String("name", "agent"))
 	a.lg.InfoCtx(ctx, "init", zap.Any("config", a.cfg))
-	wg := sync.WaitGroup{}
 	a.startPoller(ctx, &wg)
 	a.startReporter(ctx, &wg)
 	wg.Wait()
+}
+
+func (a *Agent) startProfile(ctx context.Context, wg *sync.WaitGroup) {
+	if a.cfg.PProfDuration == 0 {
+		return
+	}
+
+	wg.Add(1)
+
+	fmem, err := os.Create(`profiles/agent/profile.pb`)
+	if err != nil {
+		panic(err)
+	}
+
+	go func() {
+		defer wg.Done()
+		defer fmem.Close()
+
+		ctx, cancel := context.WithTimeout(ctx, a.cfg.PProfDuration)
+		defer cancel()
+
+		<-ctx.Done()
+
+		if err := pprof.WriteHeapProfile(fmem); err != nil {
+			a.lg.ErrorCtx(
+				ctx,
+				"write profile failed",
+				zap.Error(err),
+			)
+		} else {
+			a.lg.DebugCtx(
+				ctx,
+				"write profile finished",
+			)
+		}
+	}()
 }
 
 func (a *Agent) startPoller(ctx context.Context, wg *sync.WaitGroup) {

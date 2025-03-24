@@ -22,6 +22,7 @@ import (
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/crypto"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
 	"go.uber.org/zap"
+	"github.com/gin-contrib/pprof"
 )
 
 type Server struct {
@@ -59,6 +60,7 @@ func NewServer(ctx context.Context, c config.Config, strg storage.Storage, srvc 
 }
 
 func (s *Server) Start(wg *sync.WaitGroup) {
+	pprof.Register(s.router)
 	s.router.LoadHTMLGlob("internal/server/templates/*.tmpl")
 	s.router.POST("/update/:type/:name/:value", handlers.NewUpdateMetricHandler(s.storage))
 	s.router.POST("/update/", handlers.NewRestUpdateMetricHandler(s.storage, s.service, s.lg))

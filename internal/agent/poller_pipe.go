@@ -65,7 +65,6 @@ func (a *Agent) genMetrics(ctx context.Context, g *errgroup.Group) chan *models.
 	a.genRuntimeMetrics(ctx, &wg, g, metrics)
 	a.genCustromMetrics(ctx, &wg, g, metrics)
 	a.genVirtualMemoryMetrics(ctx, &wg, g, metrics)
-	a.genRuntimeMetrics(ctx, &wg, g, metrics)
 	a.genCPUMetrics(ctx, &wg, g, metrics)
 
 	go func() {
