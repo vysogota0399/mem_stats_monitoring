@@ -1,17 +1,16 @@
 package agent
 
 import (
-	"context"
 	"crypto/rand"
 	"errors"
-	"fmt"
 	"math/big"
 	"runtime"
 	"strconv"
 
+	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/mem"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/storage"
-	"go.uber.org/zap"
 )
 
 type MemValueGenerator func(*runtime.MemStats) any
@@ -20,27 +19,27 @@ type Reportable interface {
 	fromStore(s storage.Storage) (*models.Metric, error)
 }
 
-type MemMetric struct {
+type RuntimeMetric struct {
 	Name          string
 	Type          string
 	generateValue MemValueGenerator
 }
 
-func (m MemMetric) fromStore(s storage.Storage) (*models.Metric, error) {
+func (m RuntimeMetric) fromStore(s storage.Storage) (*models.Metric, error) {
 	return s.Get(m.Type, m.Name)
 }
 
 type CustomMetric struct {
 	Name          string
 	Type          string
-	generateValue func(mName, mType string, a *Agent) (uint64, error)
+	generateValue func(*CustomMetric, *Agent) (uint64, error)
 }
 
 func (c CustomMetric) fromStore(s storage.Storage) (*models.Metric, error) {
 	return s.Get(c.Type, c.Name)
 }
 
-var memMetricsDefinition []MemMetric = []MemMetric{
+var runtimeMetricsDefinition = []RuntimeMetric{
 	{
 		Name: "Alloc", Type: "gauge",
 		generateValue: func(stat *runtime.MemStats) any { return stat.Alloc },
@@ -163,9 +162,9 @@ var customMetricsDefinition = []CustomMetric{
 	{
 		Name: "PollCount",
 		Type: "counter",
-		generateValue: func(mName, mType string, a *Agent) (uint64, error) {
+		generateValue: func(m *CustomMetric, a *Agent) (uint64, error) {
 			var val uint64
-			last, err := a.storage.Get(mType, mName)
+			last, err := a.storage.Get(m.Type, m.Name)
 			if err != nil && !errors.Is(err, storage.ErrNoRecords) {
 				return val, err
 			}
@@ -185,7 +184,7 @@ var customMetricsDefinition = []CustomMetric{
 	{
 		Name: "RandomValue",
 		Type: "gauge",
-		generateValue: func(mName, mType string, a *Agent) (uint64, error) {
+		generateValue: func(m *CustomMetric, a *Agent) (uint64, error) {
 			const max int64 = 100
 			val, err := rand.Int(rand.Reader, big.NewInt(max))
 			if err != nil {
@@ -197,48 +196,47 @@ var customMetricsDefinition = []CustomMetric{
 	},
 }
 
-func (a *Agent) processMemMetrics(ctx context.Context) {
-	memStat := runtime.MemStats{}
-	runtime.ReadMemStats(&memStat)
-
-	for _, m := range a.memoryMetics {
-		val, err := convertToStr(m.generateValue(&memStat))
-		if err != nil {
-			a.lg.ErrorCtx(ctx, "convert to str error", zap.Error(err))
-			continue
-		}
-		record := models.Metric{
-			Name:  m.Name,
-			Type:  m.Type,
-			Value: val,
-		}
-
-		a.lg.DebugCtx(ctx, "new value", zap.Any("metric", record))
-		if err = a.storage.Set(ctx, &record); err != nil {
-			a.lg.ErrorCtx(ctx, "save value to storage error", zap.Any("metric", record), zap.Error(err))
-			continue
-		}
-	}
+type VirtualMemoryMetric struct {
+	Name          string
+	Type          string
+	generateValue func(*mem.VirtualMemoryStat) uint64
 }
 
-func (a *Agent) processCustomMetrics(ctx context.Context) {
-	for _, m := range a.customMetrics {
-		val, err := m.generateValue(m.Name, m.Type, a)
-		if err != nil {
-			a.lg.ErrorCtx(ctx, "generate value error", zap.Error(err))
-			continue
-		}
+func (c VirtualMemoryMetric) fromStore(s storage.Storage) (*models.Metric, error) {
+	return s.Get(c.Type, c.Name)
+}
 
-		record := models.Metric{
-			Name:  m.Name,
-			Type:  m.Type,
-			Value: fmt.Sprintf("%v", val),
-		}
+var virtualMemoryMetricsDefinition = []VirtualMemoryMetric{
+	{
+		Name: "TotalMemory", Type: "gauge",
+		generateValue: func(stat *mem.VirtualMemoryStat) uint64 { return stat.Total },
+	},
+	{
+		Name: "FreeMemory", Type: "gauge",
+		generateValue: func(stat *mem.VirtualMemoryStat) uint64 { return stat.Free },
+	},
+}
 
-		a.lg.DebugCtx(ctx, "new value", zap.Any("metric", record))
-		if err = a.storage.Set(ctx, &record); err != nil {
-			a.lg.ErrorCtx(ctx, "save value to storage error", zap.Any("metric", record), zap.Error(err))
-			continue
-		}
-	}
+type CPUMetric struct {
+	Name          string
+	Type          string
+	generateValue func([]cpu.InfoStat) int32
+}
+
+func (c CPUMetric) fromStore(s storage.Storage) (*models.Metric, error) {
+	return s.Get(c.Type, c.Name)
+}
+
+var cpuMetricsDefinition = []CPUMetric{
+	{
+		Name: "CPUutilization1", Type: "gauge",
+		generateValue: func(stat []cpu.InfoStat) int32 {
+			var sum int32
+			for _, c := range stat {
+				sum += c.CPU
+			}
+
+			return sum
+		},
+	},
 }

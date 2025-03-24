@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"compress/flate"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,8 +16,10 @@ import (
 	"time"
 
 	uuid "github.com/satori/go.uuid"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/config"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/crypto"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
 	"go.uber.org/zap"
 )
@@ -22,12 +27,15 @@ import (
 var ErrUnsuccessfulResponse error = errors.New("mem_stats_server: response not success")
 
 type compressor func(*bytes.Buffer) (*bytes.Buffer, error)
+
 type Reporter struct {
 	client     *http.Client
 	address    string
 	lg         *logging.ZapLogger
 	compressor compressor
 	maxRetries uint8
+	secretKey  []byte
+	semaphore  *semaphore
 }
 
 func NewReporter(address string, lg *logging.ZapLogger) *Reporter {
@@ -35,17 +43,37 @@ func NewReporter(address string, lg *logging.ZapLogger) *Reporter {
 		address:    address,
 		client:     &http.Client{},
 		lg:         lg,
-		maxRetries: 4,
+		maxRetries: 5,
 	}
 }
 
-func NewCompReporter(address string, lg *logging.ZapLogger) *Reporter {
+type semaphore struct {
+	semaCh chan struct{}
+}
+
+func (s *semaphore) Acquire() {
+	s.semaCh <- struct{}{}
+}
+
+func (s *semaphore) Release() {
+	<-s.semaCh
+}
+
+func NewSemaphore(maxReq int) *semaphore {
+	return &semaphore{
+		semaCh: make(chan struct{}, maxReq),
+	}
+}
+
+func NewCompReporter(address string, lg *logging.ZapLogger, cfg *config.Config) *Reporter {
 	return &Reporter{
 		address:    address,
 		client:     &http.Client{},
 		lg:         lg,
 		compressor: gzbody,
-		maxRetries: 4,
+		maxRetries: 5,
+		secretKey:  []byte(cfg.Key),
+		semaphore:  NewSemaphore(cfg.RateLimit),
 	}
 }
 
@@ -69,7 +97,7 @@ func (c *Reporter) UpdateMetric(ctx context.Context, mType, mName, value string)
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("X-Request-ID", uuid.NewV4().String())
 
-	resp, err := c.requestDo(ctx, req, 0)
+	resp, err := c.requestDo(ctx, req)
 	if err != nil {
 		return fmt.Errorf("internal/agent/clients/reporter: send request err: %w", err)
 	}
@@ -111,7 +139,7 @@ func (c *Reporter) UpdateMetrics(ctx context.Context, data []*models.Metric) err
 
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("X-Request-ID", uuid.NewV4().String())
-	resp, err := c.requestDo(ctx, req, 0)
+	resp, err := c.requestDo(ctx, req)
 	if err != nil {
 		return fmt.Errorf("internal/agent/clients/reporter: send request err: %w", err)
 	}
@@ -138,41 +166,98 @@ func generateMetric(mType, mName, mValue string) (*MetricsBody, error) {
 	return rec, nil
 }
 
-func (c *Reporter) requestDo(ctx context.Context, req *http.Request, atpt uint8) (*http.Response, error) {
-	atpt++
-	start := time.Now()
+type bodyKey string
 
-	reader, err := req.GetBody()
-	if err != nil {
-		return nil, err
-	}
+var bKey bodyKey = "body"
 
-	b, err := io.ReadAll(reader)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := c.client.Do(req)
-	if err != nil {
-		if atpt <= c.maxRetries {
-			c.lg.ErrorCtx(ctx, "request failed", zap.Uint8("current", atpt), zap.Uint8("max", c.maxRetries))
-			time.Sleep(time.Duration(utils.Delay(atpt)) * time.Second)
-			return c.requestDo(ctx, req, atpt)
+func (c *Reporter) requestDo(ctx context.Context, req *http.Request) (*http.Response, error) {
+	resCh := make(chan *http.Response, c.maxRetries)
+	errCh := make(chan error)
+	doRequest := func(ctx context.Context, req *http.Request, resChan chan *http.Response, errChan chan error) {
+		c.semaphore.Acquire()
+		defer c.semaphore.Release()
+
+		start := time.Now()
+		reader, err := req.GetBody()
+		if err != nil {
+			errChan <- fmt.Errorf("internal/agent/clients/reporter get body reader error %w", err)
+			return
 		}
 
-		return nil, err
+		b, err := io.ReadAll(reader)
+		if err != nil {
+			errChan <- fmt.Errorf("internal/agent/clients/reporter read body error %w", err)
+			return
+		}
+
+		ctx = context.WithValue(ctx, bKey, b)
+
+		if err := c.signRequest(ctx, req); err != nil {
+			errChan <- fmt.Errorf("internal/agent/clients/reporter sign request error %w", err)
+			return
+		}
+
+		resp, err := c.client.Do(req)
+		if err != nil {
+			errChan <- fmt.Errorf("internal/agent/clients/reporter send request error %w", err)
+			return
+		}
+		defer resp.Body.Close()
+
+		c.lg.DebugCtx(ctx,
+			"request",
+			zap.String("method", req.Method),
+			zap.String("url", req.URL.String()),
+			zap.String("body", string(b)),
+			zap.Duration("duration", time.Since(start)),
+			zap.String("status", resp.Status),
+			zap.Any("headers", req.Header),
+		)
+
+		resChan <- resp
 	}
 
-	c.lg.DebugCtx(ctx,
-		"request",
-		zap.String("method", req.Method),
-		zap.String("url", req.URL.String()),
-		zap.String("body", string(b)),
-		zap.Duration("duration", time.Since(start)),
-		zap.String("status", resp.Status),
-		zap.Any("headers", req.Header),
-	)
+	var err error
 
-	return resp, nil
+	go doRequest(ctx, req, resCh, errCh)
+
+	for i := 0; i < int(c.maxRetries); i++ {
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("internal/agent/clients/reporter context canceled")
+		case res := <-resCh:
+			return res, nil
+		case err = <-errCh:
+			c.lg.DebugCtx(ctx, "wait next", zap.Int("total", int(c.maxRetries)), zap.Int("current", i+1))
+			time.Sleep(time.Duration(utils.Delay(uint8(i))) * time.Second)
+			go doRequest(ctx, req, resCh, errCh)
+		}
+	}
+
+	return nil, err
+}
+
+var ErrBodyKeyNotFoundInContext error = fmt.Errorf("internal/agent/clients/reporter.go there is no key %s in current context", bKey)
+var signHeaderKey string = "HashSHA256"
+
+func (c *Reporter) signRequest(ctx context.Context, r *http.Request) error {
+	if len(c.secretKey) == 0 {
+		return nil
+	}
+
+	b, ok := ctx.Value(bKey).([]byte)
+	if !ok {
+		return ErrBodyKeyNotFoundInContext
+	}
+
+	sign, err := crypto.NewCms(hmac.New(sha256.New, c.secretKey)).Sign(bytes.NewReader(b))
+	if err != nil {
+		return err
+	}
+
+	r.Header.Add(signHeaderKey, base64.StdEncoding.EncodeToString(sign))
+
+	return nil
 }
 
 type MetricsBody struct {

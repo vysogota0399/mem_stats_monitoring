@@ -84,3 +84,8 @@ tasks:
     desc: Start server with db storage
     dir: .docker
     cmd: docker compose -f docker-compose.server.yml up
+
+  start-agent:
+    desc: Start agent
+    dir: .docker
+    cmd: docker compose run -e KEY=secret --rm agent 

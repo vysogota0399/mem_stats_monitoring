@@ -3,6 +3,9 @@ package server
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"io"
 	"net/http"
@@ -16,33 +19,38 @@ import (
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/handlers"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/service"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/crypto"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
 	"go.uber.org/zap"
 )
 
 type Server struct {
-	config  config.Config
-	router  *gin.Engine
-	storage storage.Storage
-	service *service.Service
-	ctx     context.Context
-	lg      *logging.ZapLogger
+	config    config.Config
+	router    *gin.Engine
+	storage   storage.Storage
+	service   *service.Service
+	ctx       context.Context
+	lg        *logging.ZapLogger
+	secretKey []byte
 }
 
 type NewServerOption func(*Server)
 
 func NewServer(ctx context.Context, c config.Config, strg storage.Storage, srvc *service.Service, lg *logging.ZapLogger) (*Server, error) {
 	s := Server{
-		config:  c,
-		router:  gin.New(),
-		service: srvc,
-		ctx:     lg.WithContextFields(ctx, zap.String("name", "server")),
-		lg:      lg,
+		config:    c,
+		router:    gin.New(),
+		service:   srvc,
+		ctx:       lg.WithContextFields(ctx, zap.String("name", "server")),
+		lg:        lg,
+		secretKey: []byte(c.Key),
 	}
 
 	s.router.Use(
 		gin.Recovery(),
+		headers(),
 		httpLogger(ctx, lg),
+		s.signer(),
 		gzip.Gzip(gzip.DefaultCompression),
 	)
 
@@ -86,6 +94,16 @@ func (s *Server) Start(wg *sync.WaitGroup) {
 	}()
 }
 
+func headers() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if c.Request.Header.Get("Content-Type") == "application/json" {
+			c.Writer.Header().Set("Content-Type", "application/json")
+		}
+
+		c.Next()
+	}
+}
+
 func httpLogger(ctx context.Context, lg *logging.ZapLogger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
@@ -104,28 +122,98 @@ func httpLogger(ctx context.Context, lg *logging.ZapLogger) gin.HandlerFunc {
 			zap.String("method", method),
 			zap.String("path", path),
 			zap.Reflect("params", c.Params),
+			zap.Reflect("headers", c.Request.Header),
 		)
 
 		body, err := io.ReadAll(c.Request.Body)
 		if err != nil {
-			lg.ErrorCtx(ctx, "read body", zap.Error(err))
+			lg.ErrorCtx(ctx, "read body error", zap.Error(err))
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+
+		c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
+		c.Set("request_id", requestID)
+
+		lg.InfoCtx(ctx, "request", zap.String("body", string(body)))
+
+		c.Next()
+
+		status := c.Writer.Status()
+		bodySize := c.Writer.Size()
+		lg.InfoCtx(ctx, "response",
+			zap.String("body", string(body)),
+			zap.Int("status", status),
+			zap.Int("response_size", bodySize),
+			zap.Duration("duration", time.Since(start)),
+		)
+	}
+}
+
+var signHeaderKey string = "HashSHA256"
+
+type signResponseReadWriter struct {
+	gin.ResponseWriter
+	b *bytes.Buffer
+}
+
+func (rw *signResponseReadWriter) Write(b []byte) (int, error) {
+	rw.b.Write(b)
+	return rw.ResponseWriter.Write(b)
+}
+
+func (rw *signResponseReadWriter) Read(b []byte) (int, error) {
+	return rw.b.Read(b)
+}
+
+func (s *Server) signer() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if len(s.secretKey) == 0 {
+			c.Next()
+			return
+		}
+
+		rw := &signResponseReadWriter{b: &bytes.Buffer{}, ResponseWriter: c.Writer}
+		c.Writer = rw
+
+		cms := crypto.NewCms(hmac.New(sha256.New, s.secretKey))
+		base64sign := c.Request.Header.Get(signHeaderKey)
+		if base64sign == "" {
+			c.Next()
+			return
+		}
+
+		sign, err := base64.StdEncoding.DecodeString(base64sign)
+		if err != nil {
+			s.lg.ErrorCtx(c, "base64 decode sign error", zap.Error(err))
+			c.AbortWithStatus(http.StatusBadRequest)
+			return
+		}
+
+		body, err := io.ReadAll(c.Request.Body)
+		if err != nil {
+			s.lg.ErrorCtx(c, "read body error", zap.Error(err))
 			c.AbortWithStatus(http.StatusInternalServerError)
 			return
 		}
 
 		c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
 
-		c.Set("request_id", requestID)
+		if eq, err := cms.Verify(bytes.NewBuffer(body), sign); err != nil || !eq {
+			s.lg.ErrorCtx(c, "invalid request signature", zap.Error(err))
+			c.AbortWithStatus(http.StatusBadRequest)
+			return
+		}
+
 		c.Next()
 
-		status := c.Writer.Status()
-		bodySize := c.Writer.Size()
+		sign, err = cms.Sign(rw)
+		if err != nil {
+			s.lg.ErrorCtx(c, "response sign failed", zap.Error(err))
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
 
-		lg.InfoCtx(ctx, "request",
-			zap.String("body", string(body)),
-			zap.Int("status", status),
-			zap.Int("body_size", bodySize),
-			zap.Duration("duration", time.Since(start)),
-		)
+		c.Request.Header.Set(signHeaderKey, base64.StdEncoding.EncodeToString(sign))
 	}
 }

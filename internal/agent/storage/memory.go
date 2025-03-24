@@ -8,7 +8,6 @@ import (
 
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
-	"go.uber.org/zap"
 )
 
 var ErrNoRecords = errors.New("memory: no records error")
@@ -35,7 +34,6 @@ func NewMemoryStorage(lg *logging.ZapLogger) *Memory {
 }
 
 func (s *Memory) Set(ctx context.Context, m *models.Metric) error {
-	ctx = s.lg.WithContextFields(ctx, zap.String("name", "memoty_storage"))
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -45,17 +43,14 @@ func (s *Memory) Set(ctx context.Context, m *models.Metric) error {
 		s.storage[m.Type] = mTypeStorage
 	}
 
-	s.lg.DebugCtx(ctx,
-		"add metric to storage",
-		zap.String("type", m.Type),
-		zap.String("name", m.Name),
-		zap.String("value", m.Value),
-	)
 	mTypeStorage[m.Name] = m.Value
 	return nil
 }
 
 func (s *Memory) Get(mType, mName string) (*models.Metric, error) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
 	mTypeStorage, ok := s.storage[mType]
 	if !ok {
 		return nil, fmt.Errorf("storage/memory: Got type: %v, name: %v - type %w", mType, mName, ErrNoRecords)

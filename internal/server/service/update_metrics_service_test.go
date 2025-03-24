@@ -7,7 +7,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
-	"github.com/vysogota0399/mem_stats_monitoring/internal/server/mocks"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/mocks"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/models"
 )
 
