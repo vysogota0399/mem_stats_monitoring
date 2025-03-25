@@ -1,7 +1,7 @@
 package models
 
 import (
-	"encoding/json"
+	"github.com/mailru/easyjson"
 )
 
 const GaugeType = "gauge"
@@ -13,8 +13,15 @@ type Metric struct {
 	Value string `json:"value"`
 }
 
+func (m *Metric) Reset() *Metric {
+	m.Name = ""
+	m.Type = ""
+	m.Value = ""
+	return m
+}
+
 func (m Metric) String() string {
-	record, err := json.Marshal(m)
+	record, err := easyjson.Marshal(m)
 	if err != nil {
 		return ""
 	}

@@ -60,22 +60,22 @@ tasks:
         - golangci-lint run --config .golangci.yml
       silent: true
 
-  test:
+  docker-test:
     desc: Run tests
     dir: .docker
     cmd: docker compose -f docker-compose.server.yml run --rm server go test -cover ./...
 
-  restart:
+  docker-restart:
     desc: Restart all services
     dir: .docker
     cmd: docker compose restart
   
-  stop:
+  docker-stop:
     desc: Stop all services
     dir: .docker
     cmd: docker compose down
 
-  start:
+  docker-start:
     desc: Start all services
     dir: .docker
     cmd: docker compose up
@@ -85,7 +85,51 @@ tasks:
     dir: .docker
     cmd: docker compose -f docker-compose.server.yml up
 
-  start-agent:
+  docker-start-agent:
     desc: Start agent
     dir: .docker
     cmd: docker compose run -e KEY=secret --rm agent 
+
+  genmock-*:
+    desc: exec "task genmock-OrdersRepository -- internal/server/entities"
+          then rename internal/server/entities/mocks/CreateOrderService to snake case
+    vars:
+      STRUCT: '{{index .MATCH 0}}'
+    cmds:
+      - mockgen -package=mocks -destination={{.CLI_ARGS}}/mocks/{{.STRUCT}}.go github.com/vysogota0399/mem_stats_monitoring/{{.CLI_ARGS}} {{.STRUCT}}
+
+
+
+  start_server:
+    desc: start go process for server
+    env:
+      ADDRESS: 127.0.0.1:8080
+      LOG_LEVEL: -1
+      DATABASE_DSN: postgres://postgres:secret@127.0.0.1:5432/mem_stats_monitoring_server
+    cmds:
+      - go run cmd/server/main.go
+
+
+  start_agent:
+    desc: start go process for agent
+    env:
+      ADDRESS: 127.0.0.1:8080
+      LOG_LEVEL: -1
+      REPORT_INTERVAL: 5
+    cmds:
+      - go run cmd/agent/main.go
+
+  start_agent_with_profile:
+    desc: start go process for agent
+    env:
+      ADDRESS: 127.0.0.1:8080
+      LOG_LEVEL: 0
+      REPORT_INTERVAL: 5
+      PPROF_DURATION: 30
+    cmds:
+      - go run cmd/agent/main.go
+
+  server_profile:
+    desc: save server profile
+    cmds:
+      - go tool pprof -http=":9090" -seconds=30 http://127.0.0.1:8080/debug/pprof/heap

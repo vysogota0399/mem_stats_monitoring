@@ -99,8 +99,9 @@ func (a *Agent) loadWithCancel(
 	r Reportable,
 	b chan *models.Metric,
 ) error {
-	m, err := r.fromStore(a.storage)
-	if err != nil && !errors.Is(err, storage.ErrNoRecords) {
+	m := a.metricsPool.Get()
+	if err := r.fromStore(a.storage, m); err != nil && !errors.Is(err, storage.ErrNoRecords) {
+		a.metricsPool.Put(m)
 		return fmt.Errorf("internal/agent/reporter_pipe load from storage error %w", err)
 	}
 
@@ -127,7 +128,12 @@ func (a *Agent) report(
 			default:
 				g.Go(
 					func() error {
-						return a.httpClient.UpdateMetric(ctx, m.Type, m.Name, m.Value)
+						if err := a.httpClient.UpdateMetric(ctx, m.Type, m.Name, m.Value); err != nil {
+							a.metricsPool.Put(m)
+							return fmt.Errorf("report_pipe: upload metric err %w", err)
+						}
+
+						return nil
 					},
 				)
 				batch = append(batch, m)
@@ -140,7 +146,18 @@ func (a *Agent) report(
 
 		g.Go(
 			func() error {
-				return a.httpClient.UpdateMetrics(ctx, batch)
+				if err := a.httpClient.UpdateMetrics(ctx, batch); err != nil {
+					for _, m := range batch {
+						a.metricsPool.Put(m)
+					}
+
+					return fmt.Errorf("reporter_pipe: update batch metrics failed error %w", err)
+				}
+
+				for _, m := range batch {
+					a.metricsPool.Put(m)
+				}
+				return nil
 			},
 		)
 
