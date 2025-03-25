@@ -8,11 +8,13 @@ import (
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/repositories"
 )
 
+// UpdateMetricService это сервис, который отвечает за логику обновления/создания одной метрики.
 type UpdateMetricService struct {
 	counterRep *repositories.Counter
 	gaugeRep   *repositories.Gauge
 }
 
+// UpdateMetricServiceParams параметры, которые необходимо передать в метод Call, для выполнения логики сервиса UpdateMetricService.
 type UpdateMetricServiceParams struct {
 	MName string
 	MType string
@@ -20,6 +22,7 @@ type UpdateMetricServiceParams struct {
 	Value *float64
 }
 
+// UpdateMetricServiceResult рузультат работы сервиса UpdateMetricService.
 type UpdateMetricServiceResult struct {
 	ID    string   `json:"id"`
 	MType string   `json:"type"`
@@ -27,6 +30,7 @@ type UpdateMetricServiceResult struct {
 	Value *float64 `json:"value,omitempty"`
 }
 
+// Call принимает параметры и отвечает за выполнение логики сервиса UpdateMetricService.
 func (s UpdateMetricService) Call(ctx context.Context, params UpdateMetricServiceParams) (UpdateMetricServiceResult, error) {
 	if params.MType == models.CounterType {
 		return s.createCounter(ctx, params)

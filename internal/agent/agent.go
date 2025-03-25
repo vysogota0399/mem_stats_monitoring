@@ -46,6 +46,10 @@ func NewAgent(lg *logging.ZapLogger, cfg config.Config, store storage.Storage) *
 		metricsPool:          NewMetricsPool(),
 	}
 }
+
+// Start запускает несколько горутин.
+// startPoller - сборк метрик
+// startReporter - формирование отчета
 func (a *Agent) Start(ctx context.Context) {
 	wg := sync.WaitGroup{}
 	a.startProfile(ctx, &wg)

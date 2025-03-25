@@ -133,3 +133,9 @@ tasks:
     desc: save server profile
     cmds:
       - go tool pprof -http=":9090" -seconds=30 http://127.0.0.1:8080/debug/pprof/heap
+
+  doc:
+    desc: godoc
+    cmds:
+      - cp -r . /tmp/godoc/src/mem_stats_monitoring
+      - godoc -http=:8010 -goroot="/tmp/godoc"

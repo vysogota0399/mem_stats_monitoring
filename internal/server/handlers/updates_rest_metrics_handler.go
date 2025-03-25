@@ -16,6 +16,7 @@ type UpdateMetricsService interface {
 	Call(context.Context, service.UpdateMetricsServiceParams) (*service.UpdateMetricsServiceResult, error)
 }
 
+// UpdatesRestMetricHandler обработчик позволяет сохранить пачку произвольных метрик.
 type UpdatesRestMetricHandler struct {
 	storage storage.Storage
 	service UpdateMetricsService

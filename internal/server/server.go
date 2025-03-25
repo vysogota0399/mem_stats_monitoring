@@ -1,3 +1,4 @@
+// Модуль server отвечает за инициализацию и запуск web - сервера. В нем определены эндпоинты, обработчики и middleware.
 package server
 
 import (
@@ -35,8 +36,6 @@ type Server struct {
 	secretKey []byte
 }
 
-type NewServerOption func(*Server)
-
 func NewServer(ctx context.Context, c config.Config, strg storage.Storage, srvc *service.Service, lg *logging.ZapLogger) (*Server, error) {
 	s := Server{
 		config:    c,
@@ -59,6 +58,7 @@ func NewServer(ctx context.Context, c config.Config, strg storage.Storage, srvc 
 	return &s, nil
 }
 
+// Start - запускат сервер в отдельной горутине с возможностью gracefull shutdown.
 func (s *Server) Start(wg *sync.WaitGroup) {
 	pprof.Register(s.router)
 	s.router.LoadHTMLGlob("internal/server/templates/*.tmpl")
@@ -106,6 +106,7 @@ func headers() gin.HandlerFunc {
 	}
 }
 
+// httpLogger - middleware для логирования запроса/ответа.
 func httpLogger(ctx context.Context, lg *logging.ZapLogger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
@@ -168,6 +169,7 @@ func (rw *signResponseReadWriter) Read(b []byte) (int, error) {
 	return rw.b.Read(b)
 }
 
+// signer - middleware для проверки подписи запроса.
 func (s *Server) signer() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if len(s.secretKey) == 0 {

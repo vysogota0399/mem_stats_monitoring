@@ -19,28 +19,35 @@ import (
 	"go.uber.org/zap"
 )
 
+// DBStorage реализация интерфейса Storage. В качестве зранилища используется база данных postgresql.
 type DBStorage struct {
-	dbDsn          string
+	dbDsn          string // строка подключения к базе данных.
 	db             *sql.DB
 	lg             *logging.ZapLogger
-	maxOpenRetries uint8
+	maxOpenRetries uint8 // максимальное количетсво попыток открыть соединение.
 }
 
+// All возвращает все записи из базы данных.
 func (s *DBStorage) All() map[string]map[string][]string {
 	s.lg.WarnCtx(context.Background(), "useless method")
 	return make(map[string]map[string][]string)
 }
 
+// Last возвращает последнюю запись из базы данных.
+// Deprecated: исторически так сложилось.
 func (s *DBStorage) Last(mType, mName string) (string, error) {
 	s.lg.WarnCtx(context.Background(), "useless method")
 	return "", nil
 }
 
+// Push добавляет новую заись в базу данных.
+// Deprecated: исторически так сложилось.
 func (s *DBStorage) Push(mType, mName string, val any) error {
 	s.lg.WarnCtx(context.Background(), "useless method")
 	return nil
 }
 
+// Ping проверяет соединение с бащой данных.
 func (s *DBStorage) Ping() error {
 	return s.db.Ping()
 }

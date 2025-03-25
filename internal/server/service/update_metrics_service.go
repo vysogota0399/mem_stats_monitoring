@@ -14,6 +14,7 @@ type GGRep interface {
 	SaveCollection(context.Context, []models.Gauge) ([]models.Gauge, error)
 }
 
+// UpdateMetricsService это сервис, который отвечает за логику обновления/создания сразу нескольких метрик.
 type UpdateMetricsService struct {
 	counterRep CntrRep
 	gaugeRep   GGRep
@@ -26,13 +27,17 @@ type UpdateMetricsServiceEl struct {
 	Value *float64 `json:"value,omitempty"`
 }
 
+// UpdateMetricsServiceParams параметры, которые необходимо передать в метод Call, для выполнения логики сервиса UpdateMetricsService.
 type UpdateMetricsServiceParams []UpdateMetricsServiceEl
+
+// UpdateMetricsServiceResult рузультат работы сервиса UpdateMetricsService.
 
 type UpdateMetricsServiceResult struct {
 	cntrs []models.Counter
 	ggs   []models.Gauge
 }
 
+// Call принимает параметры и отвечает за выполнение логики сервиса UpdateMetricsService.
 func (s *UpdateMetricsService) Call(ctx context.Context, params UpdateMetricsServiceParams) (*UpdateMetricsServiceResult, error) {
 	cntrs, ggs := s.group(params)
 
