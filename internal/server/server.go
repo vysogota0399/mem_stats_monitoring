@@ -1,3 +1,4 @@
+// Модуль server отвечает за инициализацию и запуск web - сервера. В нем определены эндпоинты, обработчики и middleware.
 package server
 
 import (
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/gin-contrib/gzip"
+	"github.com/gin-contrib/pprof"
 	"github.com/gin-gonic/gin"
 	uuid "github.com/satori/go.uuid"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/config"
@@ -33,8 +35,6 @@ type Server struct {
 	lg        *logging.ZapLogger
 	secretKey []byte
 }
-
-type NewServerOption func(*Server)
 
 func NewServer(ctx context.Context, c config.Config, strg storage.Storage, srvc *service.Service, lg *logging.ZapLogger) (*Server, error) {
 	s := Server{
@@ -58,7 +58,9 @@ func NewServer(ctx context.Context, c config.Config, strg storage.Storage, srvc 
 	return &s, nil
 }
 
+// Start - запускат сервер в отдельной горутине с возможностью gracefull shutdown.
 func (s *Server) Start(wg *sync.WaitGroup) {
+	pprof.Register(s.router)
 	s.router.LoadHTMLGlob("internal/server/templates/*.tmpl")
 	s.router.POST("/update/:type/:name/:value", handlers.NewUpdateMetricHandler(s.storage))
 	s.router.POST("/update/", handlers.NewRestUpdateMetricHandler(s.storage, s.service, s.lg))
@@ -104,6 +106,7 @@ func headers() gin.HandlerFunc {
 	}
 }
 
+// httpLogger - middleware для логирования запроса/ответа.
 func httpLogger(ctx context.Context, lg *logging.ZapLogger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
@@ -125,24 +128,24 @@ func httpLogger(ctx context.Context, lg *logging.ZapLogger) gin.HandlerFunc {
 			zap.Reflect("headers", c.Request.Header),
 		)
 
-		body, err := io.ReadAll(c.Request.Body)
-		if err != nil {
+		bodyBuff := &bytes.Buffer{}
+		if _, err := io.Copy(bodyBuff, c.Request.Body); err != nil {
 			lg.ErrorCtx(ctx, "read body error", zap.Error(err))
 			c.AbortWithStatus(http.StatusInternalServerError)
 			return
 		}
 
-		c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
+		c.Request.Body = io.NopCloser(bodyBuff)
 		c.Set("request_id", requestID)
 
-		lg.InfoCtx(ctx, "request", zap.String("body", string(body)))
+		lg.InfoCtx(ctx, "request", zap.String("body", bodyBuff.String()))
 
 		c.Next()
 
 		status := c.Writer.Status()
 		bodySize := c.Writer.Size()
 		lg.InfoCtx(ctx, "response",
-			zap.String("body", string(body)),
+			zap.String("body", bodyBuff.String()),
 			zap.Int("status", status),
 			zap.Int("response_size", bodySize),
 			zap.Duration("duration", time.Since(start)),
@@ -166,6 +169,7 @@ func (rw *signResponseReadWriter) Read(b []byte) (int, error) {
 	return rw.b.Read(b)
 }
 
+// signer - middleware для проверки подписи запроса.
 func (s *Server) signer() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if len(s.secretKey) == 0 {
@@ -190,16 +194,16 @@ func (s *Server) signer() gin.HandlerFunc {
 			return
 		}
 
-		body, err := io.ReadAll(c.Request.Body)
-		if err != nil {
+		bodyBuff := &bytes.Buffer{}
+		if _, err := io.Copy(bodyBuff, c.Request.Body); err != nil {
 			s.lg.ErrorCtx(c, "read body error", zap.Error(err))
 			c.AbortWithStatus(http.StatusInternalServerError)
 			return
 		}
 
-		c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
+		c.Request.Body = io.NopCloser(bodyBuff)
 
-		if eq, err := cms.Verify(bytes.NewBuffer(body), sign); err != nil || !eq {
+		if eq, err := cms.Verify(bodyBuff, sign); err != nil || !eq {
 			s.lg.ErrorCtx(c, "invalid request signature", zap.Error(err))
 			c.AbortWithStatus(http.StatusBadRequest)
 			return
