@@ -46,7 +46,10 @@ func (a *Agent) saveMetrics(ctx context.Context, g *errgroup.Group, metrics <-ch
 				default:
 					if err := a.storage.Set(ctx, m); err != nil {
 						a.lg.ErrorCtx(ctx, "save to storate error", zap.Error(err), zap.Any("metric", m))
+						a.metricsPool.Put(m)
 						return fmt.Errorf("internal/agent/poller_pipe save to storate error %w", err)
+					} else {
+						a.metricsPool.Put(m)
 					}
 				}
 			}
@@ -62,10 +65,10 @@ func (a *Agent) genMetrics(ctx context.Context, g *errgroup.Group) chan *models.
 	metrics := make(chan *models.Metric)
 	wg := sync.WaitGroup{}
 
-	a.genRuntimeMetrics(ctx, &wg, g, metrics)
-	a.genCustromMetrics(ctx, &wg, g, metrics)
-	a.genVirtualMemoryMetrics(ctx, &wg, g, metrics)
-	a.genCPUMetrics(ctx, &wg, g, metrics)
+	a.genRuntimeMetrics(ctx, &wg, g, metrics, true)
+	a.genCustromMetrics(ctx, &wg, g, metrics, true)
+	a.genVirtualMemoryMetrics(ctx, &wg, g, metrics, true)
+	a.genCPUMetrics(ctx, &wg, g, metrics, true)
 
 	go func() {
 		wg.Wait()
@@ -80,6 +83,7 @@ func (a *Agent) genCPUMetrics(
 	wg *sync.WaitGroup,
 	g *errgroup.Group,
 	metrics chan *models.Metric,
+	fromPool bool,
 ) {
 	wg.Add(1)
 	g.Go(func() error {
@@ -100,10 +104,18 @@ func (a *Agent) genCPUMetrics(
 					return fmt.Errorf("internal/agent/poller_pipe convert to str error %w", err)
 				}
 
-				metrics <- &models.Metric{
-					Name:  m.Name,
-					Type:  m.Type,
-					Value: val,
+				if fromPool {
+					res := a.metricsPool.Get()
+					res.Name = m.Name
+					res.Type = m.Type
+					res.Value = val
+					metrics <- res
+				} else {
+					metrics <- &models.Metric{
+						Name:  m.Name,
+						Type:  m.Type,
+						Value: val,
+					}
 				}
 			}
 		}
@@ -117,6 +129,7 @@ func (a *Agent) genVirtualMemoryMetrics(
 	wg *sync.WaitGroup,
 	g *errgroup.Group,
 	metrics chan *models.Metric,
+	fromPool bool,
 ) {
 	wg.Add(1)
 	g.Go(func() error {
@@ -137,10 +150,19 @@ func (a *Agent) genVirtualMemoryMetrics(
 					return fmt.Errorf("internal/agent/poller_pipe convert to str error %w", err)
 				}
 
-				metrics <- &models.Metric{
-					Name:  m.Name,
-					Type:  m.Type,
-					Value: val,
+				if fromPool {
+					res := a.metricsPool.Get()
+					res.Name = m.Name
+					res.Type = m.Type
+					res.Value = val
+
+					metrics <- res
+				} else {
+					metrics <- &models.Metric{
+						Name:  m.Name,
+						Type:  m.Type,
+						Value: val,
+					}
 				}
 			}
 		}
@@ -154,6 +176,7 @@ func (a *Agent) genCustromMetrics(
 	wg *sync.WaitGroup,
 	g *errgroup.Group,
 	metrics chan *models.Metric,
+	fromPool bool,
 ) {
 	wg.Add(1)
 	g.Go(func() error {
@@ -173,10 +196,19 @@ func (a *Agent) genCustromMetrics(
 				if err != nil {
 					return fmt.Errorf("internal/agent/poller_pipe generate val error %w", err)
 				}
-				metrics <- &models.Metric{
-					Name:  m.Name,
-					Type:  m.Type,
-					Value: sVal,
+
+				if fromPool {
+					res := a.metricsPool.Get()
+					res.Name = m.Name
+					res.Type = m.Type
+					res.Value = sVal
+					metrics <- res
+				} else {
+					metrics <- &models.Metric{
+						Name:  m.Name,
+						Type:  m.Type,
+						Value: sVal,
+					}
 				}
 			}
 		}
@@ -190,6 +222,7 @@ func (a *Agent) genRuntimeMetrics(
 	wg *sync.WaitGroup,
 	g *errgroup.Group,
 	metrics chan *models.Metric,
+	fromPool bool,
 ) {
 	wg.Add(1)
 	g.Go(func() error {
@@ -207,10 +240,19 @@ func (a *Agent) genRuntimeMetrics(
 				if err != nil {
 					return fmt.Errorf("internal/agent/poller_pipe convert to str error %w", err)
 				}
-				metrics <- &models.Metric{
-					Name:  m.Name,
-					Type:  m.Type,
-					Value: val,
+
+				if fromPool {
+					res := a.metricsPool.Get()
+					res.Name = m.Name
+					res.Type = m.Type
+					res.Value = val
+					metrics <- res
+				} else {
+					metrics <- &models.Metric{
+						Name:  m.Name,
+						Type:  m.Type,
+						Value: val,
+					}
 				}
 			}
 		}

@@ -3,6 +3,7 @@ package clients
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"math/rand"
 	"net/http"
@@ -47,4 +48,49 @@ func BenchmarkReporter_UpdateMetrics(b *testing.B) {
 		client.EXPECT().Request(gomock.Any()).Return(response, nil)
 		assert.NoError(b, reporter.UpdateMetrics(ctx, metrics))
 	}
+}
+
+func BenchmarkReporter_bytesreader(b *testing.B) {
+	metrics := []*models.Metric{
+		{Name: "asd", Type: "gauge", Value: "123"},
+		{Name: "asd", Type: "gauge", Value: "123"},
+		{Name: "asd", Type: "gauge", Value: "123"},
+		{Name: "asd", Type: "gauge", Value: "123"},
+		{Name: "asd", Type: "gauge", Value: "123"},
+		{Name: "asd", Type: "gauge", Value: "123"},
+		{Name: "asd", Type: "gauge", Value: "123"},
+		{Name: "asd", Type: "gauge", Value: "123"},
+		{Name: "asd", Type: "gauge", Value: "123"},
+		{Name: "asd", Type: "gauge", Value: "123"},
+		{Name: "asd", Type: "gauge", Value: "123"},
+		{Name: "asd", Type: "gauge", Value: "123"},
+		{Name: "asd", Type: "gauge", Value: "123"},
+		{Name: "asd", Type: "gauge", Value: "123"},
+		{Name: "asd", Type: "gauge", Value: "123"},
+		{Name: "asd", Type: "gauge", Value: "123"},
+		{Name: "asd", Type: "gauge", Value: "123"},
+		{Name: "asd", Type: "gauge", Value: "123"},
+		{Name: "asd", Type: "gauge", Value: "123"},
+		{Name: "asd", Type: "gauge", Value: "123"},
+	}
+	var body bytes.Buffer
+
+	if err := json.NewEncoder(&body).Encode(metrics); err != nil {
+		assert.NoError(b, err)
+	}
+
+	b.Run("when copy", func(b *testing.B) {
+		for b.Loop() {
+			buff := bytes.Buffer{}
+			_, err := io.Copy(&buff, &body)
+			assert.NoError(b, err)
+		}
+	})
+
+	b.Run("when read all", func(b *testing.B) {
+		for b.Loop() {
+			_, err := io.ReadAll(&body)
+			assert.NoError(b, err)
+		}
+	})
 }

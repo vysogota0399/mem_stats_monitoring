@@ -13,7 +13,7 @@ import (
 var ErrNoRecords = errors.New("memory: no records error")
 
 type Storage interface {
-	Get(mType, mName string) (*models.Metric, error)
+	Get(to *models.Metric) error
 	Set(ctx context.Context, m *models.Metric) error
 }
 
@@ -47,19 +47,23 @@ func (s *Memory) Set(ctx context.Context, m *models.Metric) error {
 	return nil
 }
 
-func (s *Memory) Get(mType, mName string) (*models.Metric, error) {
+func (s *Memory) Get(to *models.Metric) error {
+	mType := to.Type
+	mName := to.Name
+
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
 	mTypeStorage, ok := s.storage[mType]
 	if !ok {
-		return nil, fmt.Errorf("storage/memory: Got type: %v, name: %v - type %w", mType, mName, ErrNoRecords)
+		return fmt.Errorf("storage/memory: Got type: %v, name: %v - type %w", mType, mName, ErrNoRecords)
 	}
 
 	val, ok := mTypeStorage[mName]
 	if !ok {
-		return nil, fmt.Errorf("storage/memory: Got type: %v, name: %v - value %w", mType, mName, ErrNoRecords)
+		return fmt.Errorf("storage/memory: Got type: %v, name: %v - value %w", mType, mName, ErrNoRecords)
 	}
 
-	return &models.Metric{Name: mName, Type: mType, Value: val}, nil
+	to.Value = val
+	return nil
 }

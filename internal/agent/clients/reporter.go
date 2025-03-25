@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/mailru/easyjson"
 	uuid "github.com/satori/go.uuid"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/config"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/models"
@@ -115,7 +116,7 @@ func (c *Reporter) UpdateMetric(ctx context.Context, mType, mName, value string)
 }
 
 func (c *Reporter) UpdateMetrics(ctx context.Context, data []*models.Metric) error {
-	var metricsBody []MetricsBody
+	metricsBody := make([]MetricsBody, 0, len(data))
 	for _, m := range data {
 		rec, err := generateMetric(m.Type, m.Name, m.Value)
 		if err != nil {
@@ -164,7 +165,7 @@ func generateMetric(mType, mName, mValue string) (*MetricsBody, error) {
 	case models.CounterType:
 		rec.Delta = mValue
 	default:
-		return nil, fmt.Errorf("internal/agent/clients/reporter.go: underfined type %s", mType)
+		return nil, fmt.Errorf("internal/agent/clients/reporter.go: underfined type: %s, for name: %s, value: %s", mType, mName, mValue)
 	}
 
 	return rec, nil
@@ -188,13 +189,13 @@ func (c *Reporter) requestDo(ctx context.Context, req *http.Request) (*http.Resp
 			return
 		}
 
-		b, err := io.ReadAll(reader)
-		if err != nil {
+		buff := bytes.Buffer{}
+		if _, err := io.Copy(&buff, reader); err != nil {
 			errChan <- fmt.Errorf("internal/agent/clients/reporter read body error %w", err)
 			return
 		}
 
-		ctx = context.WithValue(ctx, bKey, b)
+		ctx = context.WithValue(ctx, bKey, buff.Bytes())
 
 		if err := c.signRequest(ctx, req); err != nil {
 			errChan <- fmt.Errorf("internal/agent/clients/reporter sign request error %w", err)
@@ -212,7 +213,7 @@ func (c *Reporter) requestDo(ctx context.Context, req *http.Request) (*http.Resp
 			"request",
 			zap.String("method", req.Method),
 			zap.String("url", req.URL.String()),
-			zap.String("body", string(b)),
+			zap.String("body", buff.String()),
 			zap.Duration("duration", time.Since(start)),
 			zap.String("status", resp.Status),
 			zap.Any("headers", req.Header),
@@ -271,15 +272,21 @@ type MetricsBody struct {
 	Value string `json:"value,omitempty"` // значение метрики в случае передачи gauge
 }
 
-func (m MetricsBody) MarshalJSON() ([]byte, error) {
-	type MetricsBodyAlias MetricsBody
+type MetricsBodyAlias struct {
+	MetricsBody
+	Delta int     `json:"delta,omitempty"` // значение метрики в случае передачи counter
+	Value float64 `json:"value,omitempty"` // значение метрики в случае передачи gauge
+}
 
+func (m MetricsBody) MarshalJSON() ([]byte, error) {
 	aliasValue := struct {
 		MetricsBodyAlias
 		Delta int     `json:"delta,omitempty"` // значение метрики в случае передачи counter
 		Value float64 `json:"value,omitempty"` // значение метрики в случае передачи gauge
 	}{
-		MetricsBodyAlias: MetricsBodyAlias(m),
+		MetricsBodyAlias: MetricsBodyAlias{
+			MetricsBody: m,
+		},
 	}
 
 	if m.Value != "" {
@@ -298,7 +305,7 @@ func (m MetricsBody) MarshalJSON() ([]byte, error) {
 		}
 	}
 
-	return json.Marshal(aliasValue)
+	return easyjson.Marshal(aliasValue)
 }
 
 func (c Reporter) prepareBody(mType, mName, value string) (*bytes.Buffer, error) {

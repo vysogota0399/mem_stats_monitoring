@@ -30,6 +30,7 @@ type Agent struct {
 	customMetrics        []CustomMetric
 	virtualMemoryMetrics []VirtualMemoryMetric
 	cpuMetrics           []CPUMetric
+	metricsPool          *MetricsPool
 }
 
 func NewAgent(lg *logging.ZapLogger, cfg config.Config, store storage.Storage) *Agent {
@@ -42,6 +43,7 @@ func NewAgent(lg *logging.ZapLogger, cfg config.Config, store storage.Storage) *
 		customMetrics:        customMetricsDefinition,
 		virtualMemoryMetrics: virtualMemoryMetricsDefinition,
 		cpuMetrics:           cpuMetricsDefinition,
+		metricsPool:          NewMetricsPool(),
 	}
 }
 func (a *Agent) Start(ctx context.Context) {

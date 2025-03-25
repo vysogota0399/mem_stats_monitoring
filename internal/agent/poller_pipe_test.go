@@ -41,19 +41,40 @@ func BenchmarkAgent_genCustromMetrics(b *testing.B) {
 		cfg:           benchFields.cfg,
 		storage:       benchFields.storage,
 		customMetrics: benchFields.customMetrics,
+		metricsPool:   NewMetricsPool(),
 	}
 
-	resChan := make(chan *models.Metric)
-	go func(c chan *models.Metric) { <-c }(resChan)
+	b.Run("fetch objects from pool", func(b *testing.B) {
+		resChan := make(chan *models.Metric)
+		go func(c chan *models.Metric) { <-c }(resChan)
 
-	for i := 0; i < b.N; i++ {
-		agent.genCustromMetrics(
-			ctx,
-			&wg,
-			errg,
-			resChan,
-		)
-	}
+		for i := 0; i < b.N; i++ {
+			agent.genCustromMetrics(
+				ctx,
+				&wg,
+				errg,
+				resChan,
+				true,
+			)
+		}
+	})
+
+	b.Run("allocates new object", func(b *testing.B) {
+		resChan := make(chan *models.Metric)
+		go func(c chan *models.Metric) {
+			agent.metricsPool.Put(<-c)
+		}(resChan)
+
+		for i := 0; i < b.N; i++ {
+			agent.genCustromMetrics(
+				ctx,
+				&wg,
+				errg,
+				resChan,
+				true,
+			)
+		}
+	})
 }
 
 func BenchmarkAgent_genRuntimeMetrics(b *testing.B) {
@@ -83,18 +104,40 @@ func BenchmarkAgent_genRuntimeMetrics(b *testing.B) {
 		cfg:            benchFields.cfg,
 		storage:        benchFields.storage,
 		runtimeMetrics: benchFields.runtimeMetrics,
+		metricsPool:    NewMetricsPool(),
 	}
-	resChan := make(chan *models.Metric)
-	go func(c chan *models.Metric) { <-c }(resChan)
 
-	for i := 0; i < b.N; i++ {
-		agent.genRuntimeMetrics(
-			ctx,
-			&wg,
-			errg,
-			resChan,
-		)
-	}
+	b.Run("fetch objects from pool", func(b *testing.B) {
+		resChan := make(chan *models.Metric)
+		go func(c chan *models.Metric) {
+			agent.metricsPool.Put(<-c)
+		}(resChan)
+
+		for b.Loop() {
+			agent.genRuntimeMetrics(
+				ctx,
+				&wg,
+				errg,
+				resChan,
+				true,
+			)
+		}
+	})
+
+	b.Run("allocates new object", func(b *testing.B) {
+		resChan := make(chan *models.Metric)
+		go func(c chan *models.Metric) { <-c }(resChan)
+
+		for b.Loop() {
+			agent.genRuntimeMetrics(
+				ctx,
+				&wg,
+				errg,
+				resChan,
+				false,
+			)
+		}
+	})
 }
 
 func BenchmarkAgent_genVirtualMemoryMetrics(b *testing.B) {
@@ -124,18 +167,40 @@ func BenchmarkAgent_genVirtualMemoryMetrics(b *testing.B) {
 		cfg:                  benchFields.cfg,
 		storage:              benchFields.storage,
 		virtualMemoryMetrics: benchFields.virtualMemory,
+		metricsPool:          NewMetricsPool(),
 	}
-	resChan := make(chan *models.Metric)
-	go func(c chan *models.Metric) { <-c }(resChan)
 
-	for i := 0; i < b.N; i++ {
-		agent.genVirtualMemoryMetrics(
-			ctx,
-			&wg,
-			errg,
-			resChan,
-		)
-	}
+	b.Run("fetch objects from pool", func(b *testing.B) {
+		resChan := make(chan *models.Metric)
+		go func(c chan *models.Metric) {
+			agent.metricsPool.Put(<-c)
+		}(resChan)
+
+		for i := 0; i < b.N; i++ {
+			agent.genVirtualMemoryMetrics(
+				ctx,
+				&wg,
+				errg,
+				resChan,
+				true,
+			)
+		}
+	})
+
+	b.Run("allocate new object", func(b *testing.B) {
+		resChan := make(chan *models.Metric)
+		go func(c chan *models.Metric) { <-c }(resChan)
+
+		for i := 0; i < b.N; i++ {
+			agent.genVirtualMemoryMetrics(
+				ctx,
+				&wg,
+				errg,
+				resChan,
+				false,
+			)
+		}
+	})
 }
 
 func BenchmarkAgent_genCPUMetrics(b *testing.B) {
@@ -161,20 +226,41 @@ func BenchmarkAgent_genCPUMetrics(b *testing.B) {
 	wg := sync.WaitGroup{}
 	errg, ctx := errgroup.WithContext(ctx)
 	agent := &Agent{
-		lg:         benchFields.lg,
-		cfg:        benchFields.cfg,
-		storage:    benchFields.storage,
-		cpuMetrics: benchFields.cpuMetrics,
+		lg:          benchFields.lg,
+		cfg:         benchFields.cfg,
+		storage:     benchFields.storage,
+		cpuMetrics:  benchFields.cpuMetrics,
+		metricsPool: NewMetricsPool(),
 	}
-	resChan := make(chan *models.Metric)
-	go func(c chan *models.Metric) { <-c }(resChan)
 
-	for i := 0; i < b.N; i++ {
-		agent.genCPUMetrics(
-			ctx,
-			&wg,
-			errg,
-			resChan,
-		)
-	}
+	b.Run("fetch objects from pool", func(b *testing.B) {
+		resChan := make(chan *models.Metric)
+		go func(c chan *models.Metric) {
+			agent.metricsPool.Put(<-c)
+		}(resChan)
+
+		for b.Loop() {
+			agent.genCPUMetrics(
+				ctx,
+				&wg,
+				errg,
+				resChan,
+				true,
+			)
+		}
+	})
+
+	b.Run("allocate new object", func(b *testing.B) {
+		resChan := make(chan *models.Metric)
+		go func(c chan *models.Metric) { <-c }(resChan)
+		for b.Loop() {
+			agent.genCPUMetrics(
+				ctx,
+				&wg,
+				errg,
+				resChan,
+				false,
+			)
+		}
+	})
 }
