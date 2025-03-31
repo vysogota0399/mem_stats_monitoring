@@ -32,11 +32,11 @@ type UpdateRestMetricHandler struct {
 	lg      *logging.ZapLogger
 }
 
-func NewRestUpdateMetricHandler(s storage.Storage, srvc *service.Service, lg *logging.ZapLogger) gin.HandlerFunc {
+func NewRestUpdateMetricHandler(s storage.Storage, srvc UpdateMetricService, lg *logging.ZapLogger) gin.HandlerFunc {
 	return updateRestMetricHandlerFunc(
 		&UpdateRestMetricHandler{
 			storage: s,
-			service: srvc.UpdateMetricService,
+			service: srvc,
 			lg:      lg,
 		},
 	)

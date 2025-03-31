@@ -25,8 +25,8 @@ func NewCounter(strg storage.Storage) *Counter {
 	}
 }
 
-// Craete сохраняет новую запись в хранилище.
-func (c *Counter) Craete(ctx context.Context, record *models.Counter) (*models.Counter, error) {
+// Create сохраняет новую запись в хранилище.
+func (c *Counter) Create(ctx context.Context, record *models.Counter) (*models.Counter, error) {
 	record, err := c.processRec(ctx, record)
 	if err != nil {
 		return nil, err

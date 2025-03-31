@@ -23,8 +23,8 @@ func NewGauge(strg storage.Storage) *Gauge {
 	}
 }
 
-// Craete сохраняет новую запись в хранилище.
-func (g *Gauge) Craete(ctx context.Context, record *models.Gauge) (*models.Gauge, error) {
+// Create сохраняет новую запись в хранилище.
+func (g *Gauge) Create(ctx context.Context, record *models.Gauge) (*models.Gauge, error) {
 	if s, ok := g.storage.(storage.DBAble); ok {
 		return g.pushToDB(ctx, s, record)
 	}
@@ -110,7 +110,7 @@ func (g Gauge) All() map[string][]models.Gauge { //nolint:dupl // :/
 	for name, values := range mNames {
 		count := len(values)
 		collection := make([]models.Gauge, count)
-		for i := 0; i < count; i++ {
+		for i := range count {
 			collection[i] = models.Gauge{}
 			if err := json.Unmarshal([]byte(values[i]), &collection[i]); err != nil {
 				continue

@@ -16,54 +16,58 @@ func NewMemoryStorageWithData(storage map[string]map[string]string, lg *logging.
 
 func TestGet(t *testing.T) {
 	tasks := []struct {
-		name       string
-		data       map[string]map[string]string
-		mName      string
-		mType      string
-		wantRecord *models.Metric
-		wantError  error
+		name      string
+		data      map[string]map[string]string
+		mName     string
+		mType     string
+		want      string
+		wantError error
 	}{
 		{
-			name:       "when record found",
-			data:       map[string]map[string]string{"counter": {"test": "1"}},
-			mName:      "test",
-			mType:      "counter",
-			wantRecord: &models.Metric{Name: "test", Type: "counter", Value: "1"},
-			wantError:  nil,
+			name:      "when record found",
+			data:      map[string]map[string]string{"counter": {"test": "1"}},
+			mName:     "test",
+			mType:     "counter",
+			want:      "1",
+			wantError: nil,
 		},
 		{
-			name:       "when type not found",
-			data:       map[string]map[string]string{"counter": {"test": "1"}},
-			mName:      "test",
-			mType:      "hist",
-			wantRecord: nil,
-			wantError:  ErrNoRecords,
+			name:      "when type not found",
+			data:      map[string]map[string]string{"counter": {"test": "1"}},
+			mName:     "test",
+			mType:     "hist",
+			want:      "",
+			wantError: ErrNoRecords,
 		},
 		{
-			name:       "when name not found",
-			data:       map[string]map[string]string{"counter": {"test": "1"}},
-			mName:      "supertest",
-			mType:      "counter",
-			wantRecord: nil,
-			wantError:  ErrNoRecords,
+			name:      "when name not found",
+			data:      map[string]map[string]string{"counter": {"test": "1"}},
+			mName:     "supertest",
+			mType:     "counter",
+			want:      "",
+			wantError: ErrNoRecords,
 		},
 		{
-			name:       "when slice empty",
-			data:       map[string]map[string]string{"counter": {"test": "1"}},
-			mName:      "supertest",
-			mType:      "counter",
-			wantRecord: nil,
-			wantError:  ErrNoRecords,
+			name:      "when slice empty",
+			data:      map[string]map[string]string{"counter": {"test": "1"}},
+			mName:     "supertest",
+			mType:     "counter",
+			want:      "",
+			wantError: ErrNoRecords,
 		},
 	}
 
 	for _, tt := range tasks {
 		t.Run(tt.name, func(t *testing.T) {
-			// lg, _ := logging.MustZapLogger(zapcore.DebugLevel)
-			// storage := NewMemoryStorageWithData(tt.data, lg)
-			// err := storage.Get(tt.mType, tt.mName)
-			// assert.ErrorIs(t, err, tt.wantError)
-			// assert.Equal(t, tt.wantRecord, val)
+			lg, _ := logging.MustZapLogger(zapcore.DebugLevel)
+			storage := NewMemoryStorageWithData(tt.data, lg)
+			m := &models.Metric{
+				Type: tt.mType,
+				Name: tt.mName,
+			}
+			err := storage.Get(m)
+			assert.ErrorIs(t, err, tt.wantError)
+			assert.Equal(t, tt.want, m.Value)
 		})
 	}
 }

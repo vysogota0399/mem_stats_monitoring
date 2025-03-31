@@ -50,7 +50,7 @@ func Example() {
 	services := service.New(storage)
 
 	// Инициализкация хендлера
-	h := handlers.NewUpdatesRestMetricHandler(storage, services, logger)
+	h := handlers.NewUpdatesRestMetricsHandler(storage, services.UpdateMetricsService, logger)
 
 	// Инициализация сервера.
 	router := gin.Default()

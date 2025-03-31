@@ -8,9 +8,11 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"io"
+	"net"
 	"net/http"
-	"sync"
+	"net/http/httptest"
 	"time"
 
 	"github.com/gin-contrib/gzip"
@@ -24,7 +26,13 @@ import (
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/crypto"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
+
+type IServer interface {
+	ListenAndServe() error
+	Shutdown(context.Context) error
+}
 
 type Server struct {
 	config    config.Config
@@ -34,9 +42,18 @@ type Server struct {
 	ctx       context.Context
 	lg        *logging.ZapLogger
 	secretKey []byte
+	htmlRoute bool
+	server    IServer
 }
 
-func NewServer(ctx context.Context, c config.Config, strg storage.Storage, srvc *service.Service, lg *logging.ZapLogger) (*Server, error) {
+func NewServer(
+	ctx context.Context,
+	c config.Config,
+	strg storage.Storage,
+	srvc *service.Service,
+	lg *logging.ZapLogger,
+	opts ...ServerOption,
+) *Server {
 	s := Server{
 		config:    c,
 		router:    gin.New(),
@@ -44,6 +61,7 @@ func NewServer(ctx context.Context, c config.Config, strg storage.Storage, srvc 
 		ctx:       lg.WithContextFields(ctx, zap.String("name", "server")),
 		lg:        lg,
 		secretKey: []byte(c.Key),
+		htmlRoute: true,
 	}
 
 	s.router.Use(
@@ -54,46 +72,51 @@ func NewServer(ctx context.Context, c config.Config, strg storage.Storage, srvc 
 		gzip.Gzip(gzip.DefaultCompression),
 	)
 
-	s.storage = strg
-	return &s, nil
-}
-
-// Start - запускат сервер в отдельной горутине с возможностью gracefull shutdown.
-func (s *Server) Start(wg *sync.WaitGroup) {
-	pprof.Register(s.router)
-	s.router.LoadHTMLGlob("internal/server/templates/*.tmpl")
-	s.router.POST("/update/:type/:name/:value", handlers.NewUpdateMetricHandler(s.storage))
-	s.router.POST("/update/", handlers.NewRestUpdateMetricHandler(s.storage, s.service, s.lg))
-	s.router.POST("/updates/", handlers.NewUpdatesRestMetricHandler(s.storage, s.service, s.lg))
-	s.router.POST("/value/", handlers.NewShowRestMetricHandler(s.storage, s.lg))
-	s.router.GET("/value/:type/:name", handlers.NewShowMetricHandler(s.storage))
-	s.router.GET("/ping", handlers.NewPingHandler(s.storage, s.lg))
-	s.router.GET("/", handlers.NewRootHandler(s.storage))
-
-	s.lg.DebugCtx(s.ctx, "start", zap.String("config", s.config.String()))
-
-	server := &http.Server{
-		Addr:              s.config.Address,
+	s.server = &http.Server{
+		Addr:              c.Address,
 		ReadHeaderTimeout: 10 * time.Second,
 		Handler:           s.router,
 	}
 
-	go func() {
-		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			s.lg.ErrorCtx(s.ctx, "Failed", zap.Error(err))
+	s.storage = strg
+	return &s
+}
+
+// Start - запускат сервер в отдельной горутине с возможностью gracefull shutdown.
+func (s *Server) Start(wg *errgroup.Group) {
+	pprof.Register(s.router)
+	if s.htmlRoute {
+		s.router.LoadHTMLGlob("internal/server/templates/*.tmpl")
+		s.router.GET("/", handlers.NewRootHandler(s.storage))
+	}
+
+	s.router.POST("/update/:type/:name/:value", handlers.NewUpdateMetricHandler(s.storage))
+	s.router.POST("/update/", handlers.NewRestUpdateMetricHandler(s.storage, s.service.UpdateMetricService, s.lg))
+	s.router.POST("/updates/", handlers.NewUpdatesRestMetricsHandler(s.storage, s.service.UpdateMetricsService, s.lg))
+	s.router.POST("/value/", handlers.NewShowRestMetricHandler(s.storage, s.lg))
+	s.router.GET("/value/:type/:name", handlers.NewShowMetricHandler(s.storage))
+	s.router.GET("/ping", handlers.NewPingHandler(s.storage, s.lg))
+
+	s.lg.DebugCtx(s.ctx, "start", zap.String("config", s.config.String()))
+
+	wg.Go(func() error {
+		if err := s.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			return fmt.Errorf("server: startup server failed error %w", err)
 		}
-	}()
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+		return nil
+	})
 
+	wg.Go(func() error {
 		<-s.ctx.Done()
+
 		s.lg.DebugCtx(s.ctx, "Graceful shutdown")
-		if err := server.Shutdown(s.ctx); err != nil {
-			s.lg.ErrorCtx(s.ctx, "Shutdown failed", zap.Error(err))
+		if err := s.server.Shutdown(s.ctx); err != nil {
+			return fmt.Errorf("server: gracefull shutdown failed error %w", err)
 		}
-	}()
+
+		return nil
+	})
 }
 
 func headers() gin.HandlerFunc {
@@ -220,4 +243,45 @@ func (s *Server) signer() gin.HandlerFunc {
 
 		c.Request.Header.Set(signHeaderKey, base64.StdEncoding.EncodeToString(sign))
 	}
+}
+
+type ServerOption func(s *Server) error
+
+type TestServer struct {
+	*httptest.Server
+}
+
+func NewTestServer(cfg config.Config) (*TestServer, error) {
+	ls, err := net.Listen("tcp", cfg.Address)
+	if err != nil {
+		return nil, fmt.Errorf("server: create test listener error %w", err)
+	}
+
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	srv := httptest.NewUnstartedServer(h)
+	srv.Listener = ls
+
+	return &TestServer{Server: srv}, nil
+}
+
+func (srv *TestServer) ListenAndServe() error {
+	srv.Start()
+	return nil
+}
+
+func (srv *TestServer) Shutdown(ctx context.Context) error {
+	return srv.Shutdown(ctx)
+}
+
+var withTestServer ServerOption = func(s *Server) error {
+	srv, err := NewTestServer(s.config)
+	if err != nil {
+		return fmt.Errorf("server: create test server error %w", err)
+	}
+
+	s.server = srv
+	return nil
 }

@@ -5,13 +5,14 @@ import (
 	"database/sql"
 	"embed"
 	"errors"
-	"sync"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/config"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
@@ -64,7 +65,7 @@ type DBAble interface {
 
 const pgxDriver string = "pgx"
 
-func NewDBStorage(ctx context.Context, cfg config.Config, wg *sync.WaitGroup, lg *logging.ZapLogger) (Storage, error) {
+func NewDBStorage(ctx context.Context, cfg config.Config, errg *errgroup.Group, lg *logging.ZapLogger) (Storage, error) {
 	strg := &DBStorage{
 		lg:             lg,
 		dbDsn:          cfg.DatabaseDSN,
@@ -81,19 +82,15 @@ func NewDBStorage(ctx context.Context, cfg config.Config, wg *sync.WaitGroup, lg
 	}
 
 	ctx = lg.WithContextFields(ctx, zap.String("name", "db_storage"))
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
 
+	errg.Go(func() error {
 		<-ctx.Done()
 		if err := strg.db.Close(); err != nil {
-			lg.FatalCtx(
-				ctx,
-				"close db failed",
-				zap.Error(err),
-			)
+			return fmt.Errorf("db: close db failed error %w", err)
 		}
-	}()
+
+		return nil
+	})
 
 	return strg, nil
 }

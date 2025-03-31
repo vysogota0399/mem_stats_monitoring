@@ -47,7 +47,7 @@ func (s UpdateMetricService) createCounter(ctx context.Context, params UpdateMet
 		value = *params.Delta
 	}
 
-	record, err := s.counterRep.Craete(
+	record, err := s.counterRep.Create(
 		ctx,
 		&models.Counter{
 			Name:  params.MName,
@@ -71,7 +71,7 @@ func (s UpdateMetricService) createGauge(ctx context.Context, params UpdateMetri
 		value = *params.Value
 	}
 
-	record, err := s.gaugeRep.Craete(
+	record, err := s.gaugeRep.Create(
 		ctx,
 		&models.Gauge{
 			Name:  params.MName,

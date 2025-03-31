@@ -139,3 +139,15 @@ tasks:
     cmds:
       - cp -r . /tmp/godoc/src/mem_stats_monitoring
       - godoc -http=:8010 -goroot="/tmp/godoc"
+
+  server-test-coverage:
+    dir: internal/server
+    cmds:
+      - go test ./... -coverprofile=coverage.out
+      - go tool cover -func=coverage.out
+
+  agent-test-coverage:
+    dir: internal/agent
+    cmds:
+    - go test ./... -coverprofile=coverage.out
+    - go tool cover -func=coverage.out

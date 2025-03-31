@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/stretchr/testify/assert"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
@@ -37,7 +38,7 @@ func TestCreate(t *testing.T) {
 	for _, tt := range tasks {
 		t.Run(tt.name, func(t *testing.T) {
 			subject := NewCounter(tt.storage)
-			record, err := subject.Craete(context.Background(), &tt.record)
+			record, err := subject.Create(context.Background(), &tt.record)
 			assert.NoError(t, err)
 			assert.NotNil(t, record)
 			assert.Equal(t, tt.wantsRecord, *record)
@@ -123,6 +124,116 @@ func TestCounter_All(t *testing.T) {
 			c := NewCounter(tt.fields.storage)
 			actual := c.All()
 			assert.Equal(t, tt.want, actual)
+		})
+	}
+}
+
+func TestCounter_SaveCollection(t *testing.T) {
+	type fields struct {
+		storage    storage.Storage
+		collection []models.Counter
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		wantErr bool
+	}{
+		{
+			name: "when inmemory storage",
+			fields: fields{
+				storage:    storage.NewMemory(),
+				collection: []models.Counter{},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := &Counter{
+				storage: tt.fields.storage,
+			}
+			_, err := g.SaveCollection(context.Background(), tt.fields.collection)
+			assert.Equal(t, tt.wantErr, err != nil)
+		})
+	}
+}
+
+func TestCounter_Create(t *testing.T) {
+	type fields struct {
+		storage storage.Storage
+		record  models.Counter
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		wantErr bool
+	}{
+		{
+			name: "when inmemory storage",
+			fields: fields{
+				storage: storage.NewMemory(),
+				record:  models.Counter{},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := &Counter{
+				storage: tt.fields.storage,
+			}
+			_, err := g.Create(context.Background(), &tt.fields.record)
+			assert.Equal(t, tt.wantErr, err != nil)
+		})
+	}
+}
+
+func TestCounter_SearchByName(t *testing.T) {
+	type fields struct {
+		storage storage.Storage
+	}
+	type args struct {
+		names []string
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   map[string]models.Counter
+		args   args
+	}{
+		{
+			name: "when storage has values then returns collection",
+			args: args{names: []string{"fiz"}},
+			fields: fields{
+				storage: storage.NewMemStorageWithData(
+					map[string]map[string][]string{
+						"counter": {
+							"fiz": []string{`{"value": 0, "name": "fiz"}`},
+							"baz": []string{`{"value": 0, "name": "baz"}`},
+						},
+					},
+				),
+			},
+			want: map[string]models.Counter{
+				"fiz": {Name: "fiz", Value: 0},
+			},
+		},
+		{
+			name: "when storage has no values then returns empty collection",
+			fields: fields{
+				storage: storage.NewMemStorageWithData(
+					map[string]map[string][]string{},
+				),
+			},
+			want: map[string]models.Counter{},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Counter{
+				storage: tt.fields.storage,
+			}
+			got, err := c.SearchByName(context.Background(), tt.args.names)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }

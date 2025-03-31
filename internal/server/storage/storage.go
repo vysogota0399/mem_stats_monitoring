@@ -8,6 +8,7 @@ import (
 
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/config"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
+	"golang.org/x/sync/errgroup"
 )
 
 type Storage interface {
@@ -41,11 +42,11 @@ func New() Storage {
 	return NewMemory()
 }
 
-func NewStorage(ctx context.Context, cfg config.Config, wg *sync.WaitGroup, lg *logging.ZapLogger) (Storage, error) {
+func NewStorage(ctx context.Context, cfg config.Config, errg *errgroup.Group, lg *logging.ZapLogger) (Storage, error) {
 	if cfg.IsDBDSNPresent() {
-		return NewDBStorage(ctx, cfg, wg, lg)
+		return NewDBStorage(ctx, cfg, errg, lg)
 	} else {
-		return NewFilePersistentMemory(ctx, cfg, wg, lg)
+		return NewFilePersistentMemory(ctx, cfg, errg, lg)
 	}
 }
 
