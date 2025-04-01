@@ -17,16 +17,18 @@ import (
 	"go.uber.org/zap"
 )
 
-type HttpClient interface {
+// HTTPClient defines the interface for making HTTP requests to the metrics server
+type HTTPClient interface {
 	UpdateMetric(ctx context.Context, mType, mName, value string) error
 	UpdateMetrics(ctx context.Context, data []*models.Metric) error
 }
 
+// Agent handles the collection and reporting of system metrics
 type Agent struct {
 	lg                   *logging.ZapLogger
 	storage              storage.Storage
 	cfg                  config.Config
-	httpClient           HttpClient
+	httpClient           HTTPClient
 	runtimeMetrics       []RuntimeMetric
 	customMetrics        []CustomMetric
 	virtualMemoryMetrics []VirtualMemoryMetric
@@ -34,6 +36,7 @@ type Agent struct {
 	metricsPool          *MetricsPool
 }
 
+// NewAgent creates a new Agent instance with the specified configuration
 func NewAgent(lg *logging.ZapLogger, cfg config.Config, store storage.Storage) *Agent {
 	return &Agent{
 		lg:                   lg,
@@ -48,9 +51,9 @@ func NewAgent(lg *logging.ZapLogger, cfg config.Config, store storage.Storage) *
 	}
 }
 
-// Start запускает несколько горутин.
-// startPoller - сборка метрик
-// startReporter - отправка метрик
+// Start launches multiple goroutines:
+// - startPoller: collects metrics
+// - startReporter: sends metrics to the server
 func (a *Agent) Start(ctx context.Context) {
 	wg := sync.WaitGroup{}
 
@@ -62,6 +65,7 @@ func (a *Agent) Start(ctx context.Context) {
 	wg.Wait()
 }
 
+// startProfiler starts the HTTP profiler server if configured
 func (a *Agent) startProfiler() {
 	if a.cfg.ProfileAddress == "" {
 		return
@@ -74,6 +78,7 @@ func (a *Agent) startProfiler() {
 	}()
 }
 
+// startPoller launches a goroutine that periodically collects system metrics
 func (a *Agent) startPoller(ctx context.Context, wg *sync.WaitGroup) {
 	wg.Add(1)
 
@@ -99,6 +104,7 @@ func (a *Agent) startPoller(ctx context.Context, wg *sync.WaitGroup) {
 	}()
 }
 
+// startReporter launches a goroutine that periodically sends collected metrics to the server
 func (a Agent) startReporter(ctx context.Context, wg *sync.WaitGroup) {
 	wg.Add(1)
 
@@ -120,6 +126,7 @@ func (a Agent) startReporter(ctx context.Context, wg *sync.WaitGroup) {
 	}()
 }
 
+// convertToStr converts various numeric types to their string representation
 func convertToStr(val any) (string, error) {
 	switch val2 := val.(type) {
 	case uint32:

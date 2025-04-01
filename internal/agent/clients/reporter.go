@@ -29,59 +29,68 @@ var ErrUnsuccessfulResponse error = errors.New("mem_stats_server: response not s
 
 type compressor func(*bytes.Buffer) (*bytes.Buffer, error)
 
+// Requester interface defines the contract for making HTTP requests
 type Requester interface {
 	Request(r *http.Request) (*http.Response, error)
 }
 
+// Reporter handles the communication with the metrics server
 type Reporter struct {
-	client     Requester
-	address    string
-	lg         *logging.ZapLogger
-	compressor compressor
-	maxRetries uint8
-	secretKey  []byte
-	semaphore  *semaphore
+	client      Requester
+	address     string
+	lg          *logging.ZapLogger
+	compressor  compressor
+	maxAttempts uint8
+	secretKey   []byte
+	semaphore   *semaphore
 }
 
+// NewReporter creates a new Reporter instance with basic configuration
 func NewReporter(address string, lg *logging.ZapLogger, client Requester) *Reporter {
 	return &Reporter{
-		address:    address,
-		client:     client,
-		lg:         lg,
-		maxRetries: 5,
+		address:     address,
+		client:      client,
+		lg:          lg,
+		maxAttempts: 5,
 	}
 }
 
+// semaphore provides a simple semaphore implementation for rate limiting
 type semaphore struct {
 	semaCh chan struct{}
 }
 
+// Acquire acquires a semaphore permit
 func (s *semaphore) Acquire() {
 	s.semaCh <- struct{}{}
 }
 
+// Release releases a semaphore permit
 func (s *semaphore) Release() {
 	<-s.semaCh
 }
 
+// NewSemaphore creates a new semaphore with the specified maximum number of permits
 func NewSemaphore(maxReq int) *semaphore {
 	return &semaphore{
 		semaCh: make(chan struct{}, maxReq),
 	}
 }
 
+// NewCompReporter creates a new Reporter instance with compression and rate limiting
 func NewCompReporter(address string, lg *logging.ZapLogger, cfg *config.Config, client Requester) *Reporter {
 	return &Reporter{
-		address:    address,
-		client:     client,
-		lg:         lg,
-		compressor: gzbody,
-		maxRetries: 5,
-		secretKey:  []byte(cfg.Key),
-		semaphore:  NewSemaphore(cfg.RateLimit),
+		address:     address,
+		client:      client,
+		lg:          lg,
+		compressor:  gzbody,
+		maxAttempts: cfg.MaxAttempts,
+		secretKey:   []byte(cfg.Key),
+		semaphore:   NewSemaphore(cfg.RateLimit),
 	}
 }
 
+// UpdateMetric sends a single metric update to the server
 func (c *Reporter) UpdateMetric(ctx context.Context, mType, mName, value string) error {
 	ctx = c.lg.WithContextFields(ctx, zap.String("name", "http"))
 	body, err := c.prepareBody(mType, mName, value)
@@ -90,7 +99,7 @@ func (c *Reporter) UpdateMetric(ctx context.Context, mType, mName, value string)
 	}
 
 	req, err := http.NewRequestWithContext(
-		context.TODO(),
+		ctx,
 		"POST", fmt.Sprintf("%s/update/", c.address),
 		body,
 	)
@@ -115,6 +124,7 @@ func (c *Reporter) UpdateMetric(ctx context.Context, mType, mName, value string)
 	return nil
 }
 
+// UpdateMetrics sends a batch of metric updates to the server
 func (c *Reporter) UpdateMetrics(ctx context.Context, data []*models.Metric) error {
 	metricsBody := make([]MetricsBody, 0, len(data))
 	for _, m := range data {
@@ -133,11 +143,10 @@ func (c *Reporter) UpdateMetrics(ctx context.Context, data []*models.Metric) err
 	}
 
 	req, err := http.NewRequestWithContext(
-		context.TODO(),
+		ctx,
 		"POST", fmt.Sprintf("%s/updates/", c.address),
 		&body,
 	)
-
 	if err != nil {
 		return fmt.Errorf("internal/agent/clients/reporter: create request err: %w", err)
 	}
@@ -176,8 +185,11 @@ type bodyKey string
 var bKey bodyKey = "body"
 
 func (c *Reporter) requestDo(ctx context.Context, req *http.Request) (*http.Response, error) {
-	resCh := make(chan *http.Response, c.maxRetries)
+	resCh := make(chan *http.Response, c.maxAttempts)
 	errCh := make(chan error)
+	defer close(resCh)
+	defer close(errCh)
+
 	doRequest := func(ctx context.Context, req *http.Request, resChan chan *http.Response, errChan chan error) {
 		c.semaphore.Acquire()
 		defer c.semaphore.Release()
@@ -224,16 +236,20 @@ func (c *Reporter) requestDo(ctx context.Context, req *http.Request) (*http.Resp
 
 	var err error
 
-	go doRequest(ctx, req, resCh, errCh)
+	for i := uint8(0); i < c.maxAttempts; i++ {
+		go doRequest(ctx, req, resCh, errCh)
 
-	for i := 0; i < int(c.maxRetries); i++ {
 		select {
 		case <-ctx.Done():
 			return nil, fmt.Errorf("internal/agent/clients/reporter context canceled")
 		case res := <-resCh:
 			return res, nil
 		case err = <-errCh:
-			c.lg.DebugCtx(ctx, "wait next", zap.Int("total", int(c.maxRetries)), zap.Int("current", i+1))
+			if i >= c.maxAttempts-1 {
+				return nil, err
+			}
+
+			c.lg.DebugCtx(ctx, "wait next", zap.Int("total", int(c.maxAttempts)), zap.Int("current", int(i+1)))
 			time.Sleep(time.Duration(utils.Delay(uint8(i))) * time.Second)
 			go doRequest(ctx, req, resCh, errCh)
 		}
@@ -265,24 +281,26 @@ func (c *Reporter) signRequest(ctx context.Context, r *http.Request) error {
 	return nil
 }
 
+// MetricsBody represents the structure of a metric in the request body
 type MetricsBody struct {
-	MName string `json:"id"`              // имя метрики
-	MType string `json:"type"`            // параметр, принимающий значение gauge или counter
-	Delta string `json:"delta,omitempty"` // значение метрики в случае передачи counter
-	Value string `json:"value,omitempty"` // значение метрики в случае передачи gauge
+	MName string `json:"id"`              // metric name
+	MType string `json:"type"`            // metric type (gauge or counter)
+	Delta string `json:"delta,omitempty"` // metric value for counter type
+	Value string `json:"value,omitempty"` // metric value for gauge type
 }
 
+// MetricsBodyAlias provides type conversion for metric values
 type MetricsBodyAlias struct {
 	MetricsBody
-	Delta int     `json:"delta,omitempty"` // значение метрики в случае передачи counter
-	Value float64 `json:"value,omitempty"` // значение метрики в случае передачи gauge
+	Delta int     `json:"delta,omitempty"` // metric value for counter type (converted to int)
+	Value float64 `json:"value,omitempty"` // metric value for gauge type (converted to float64)
 }
 
 func (m MetricsBody) MarshalJSON() ([]byte, error) {
 	aliasValue := struct {
 		MetricsBodyAlias
-		Delta int     `json:"delta,omitempty"` // значение метрики в случае передачи counter
-		Value float64 `json:"value,omitempty"` // значение метрики в случае передачи gauge
+		Delta int     `json:"delta,omitempty"` // metric value for counter type
+		Value float64 `json:"value,omitempty"` // metric value for gauge type
 	}{
 		MetricsBodyAlias: MetricsBodyAlias{
 			MetricsBody: m,

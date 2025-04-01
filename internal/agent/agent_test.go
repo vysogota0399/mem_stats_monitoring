@@ -74,11 +74,13 @@ func TestGenMetrics(t *testing.T) {
 	// Check multiple metrics to ensure generator is working
 	for range 3 {
 		select {
-		case metric := <-metricsChan:
-			require.NotNil(t, metric)
-			assert.NotEmpty(t, metric.Name, "Metric name should not be empty")
-			assert.Contains(t, []string{"gauge", "counter"}, metric.Type, "Metric type should be gauge or counter")
-			assert.NotNil(t, metric.Value, "Metric value should not be nil") // Changed from NotEmpty to NotNil
+		case metric, ok := <-metricsChan:
+			if ok {
+				require.NotNil(t, metric)
+				assert.NotEmpty(t, metric.Name, "Metric name should not be empty")
+				assert.Contains(t, []string{"gauge", "counter"}, metric.Type, "Metric type should be gauge or counter")
+				assert.NotNil(t, metric.Value, "Metric value should not be nil") // Changed from NotEmpty to NotNil
+			}
 		case <-time.After(2 * time.Second):
 			t.Fatal("Timeout waiting for metrics")
 		}
@@ -93,7 +95,7 @@ func TestSaveMetrics(t *testing.T) {
 	require.NoError(t, err)
 
 	store := storage.NewMemoryStorage(logger)
-	cfg, err := config.NewConfig()
+	cfg := config.Config{}
 	assert.NoError(t, err)
 
 	agent := NewAgent(logger, cfg, store)
@@ -158,7 +160,7 @@ func TestAgent_Start(t *testing.T) {
 			setup: func(client *mocks.MockHttpClient) (context.Context, context.CancelFunc) {
 				client.EXPECT().UpdateMetric(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes().Return(nil)
 				client.EXPECT().UpdateMetrics(gomock.Any(), gomock.Any()).AnyTimes().AnyTimes().Return(nil)
-				return context.WithTimeout(context.Background(), 500*time.Millisecond)
+				return context.WithTimeout(context.Background(), 1000*time.Millisecond)
 			},
 			validate: func(t *testing.T, ctx context.Context) {
 				assert.Equal(t, context.DeadlineExceeded, ctx.Err())

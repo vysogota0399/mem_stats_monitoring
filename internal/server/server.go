@@ -1,4 +1,5 @@
-// Модуль server отвечает за инициализацию и запуск web - сервера. В нем определены эндпоинты, обработчики и middleware.
+// Package server handles the initialization and operation of the web server.
+// It defines endpoints, handlers, and middleware for the metrics collection service.
 package server
 
 import (
@@ -29,11 +30,13 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// IServer defines the interface for server operations
 type IServer interface {
 	ListenAndServe() error
 	Shutdown(context.Context) error
 }
 
+// Server represents the main server instance that handles HTTP requests
 type Server struct {
 	config    config.Config
 	router    *gin.Engine
@@ -46,6 +49,7 @@ type Server struct {
 	server    IServer
 }
 
+// NewServer creates a new Server instance with the specified configuration
 func NewServer(
 	ctx context.Context,
 	c config.Config,
@@ -82,7 +86,7 @@ func NewServer(
 	return &s
 }
 
-// Start - запускат сервер в отдельной горутине с возможностью gracefull shutdown.
+// Start launches the server in a separate goroutine with graceful shutdown support
 func (s *Server) Start(wg *errgroup.Group) {
 	pprof.Register(s.router)
 	if s.htmlRoute {
@@ -119,6 +123,7 @@ func (s *Server) Start(wg *errgroup.Group) {
 	})
 }
 
+// headers middleware sets appropriate content type headers for JSON responses
 func headers() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if c.Request.Header.Get("Content-Type") == "application/json" {
@@ -129,7 +134,7 @@ func headers() gin.HandlerFunc {
 	}
 }
 
-// httpLogger - middleware для логирования запроса/ответа.
+// httpLogger middleware logs request/response details including timing and body content
 func httpLogger(ctx context.Context, lg *logging.ZapLogger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
@@ -178,21 +183,24 @@ func httpLogger(ctx context.Context, lg *logging.ZapLogger) gin.HandlerFunc {
 
 var signHeaderKey string = "HashSHA256"
 
+// signResponseReadWriter wraps gin.ResponseWriter to capture response body for signing
 type signResponseReadWriter struct {
 	gin.ResponseWriter
 	b *bytes.Buffer
 }
 
+// Write implements the io.Writer interface
 func (rw *signResponseReadWriter) Write(b []byte) (int, error) {
 	rw.b.Write(b)
 	return rw.ResponseWriter.Write(b)
 }
 
+// Read implements the io.Reader interface
 func (rw *signResponseReadWriter) Read(b []byte) (int, error) {
 	return rw.b.Read(b)
 }
 
-// signer - middleware для проверки подписи запроса.
+// signer middleware verifies request signatures and signs responses
 func (s *Server) signer() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if len(s.secretKey) == 0 {
@@ -245,12 +253,15 @@ func (s *Server) signer() gin.HandlerFunc {
 	}
 }
 
+// ServerOption defines a function type for configuring Server instances
 type ServerOption func(s *Server) error
 
+// TestServer provides a test implementation of the IServer interface
 type TestServer struct {
 	*httptest.Server
 }
 
+// NewTestServer creates a new TestServer instance for testing purposes
 func NewTestServer(cfg config.Config) (*TestServer, error) {
 	ls, err := net.Listen("tcp", cfg.Address)
 	if err != nil {
@@ -267,13 +278,16 @@ func NewTestServer(cfg config.Config) (*TestServer, error) {
 	return &TestServer{Server: srv}, nil
 }
 
+// ListenAndServe starts the test server
 func (srv *TestServer) ListenAndServe() error {
 	srv.Start()
 	return nil
 }
 
+// Shutdown gracefully stops the test server
 func (srv *TestServer) Shutdown(ctx context.Context) error {
-	return srv.Shutdown(ctx)
+	srv.Close()
+	return nil
 }
 
 var withTestServer ServerOption = func(s *Server) error {

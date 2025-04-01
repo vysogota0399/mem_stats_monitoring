@@ -13,6 +13,9 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// runReporterPipe executes the complete reporting pipeline:
+// 1. Loads metrics from storage
+// 2. Sends metrics to the server
 func (a *Agent) runReporterPipe(ctx context.Context) {
 	operationID := uuid.NewV4()
 	ctx = a.lg.WithContextFields(ctx, zap.String("operation_id", operationID.String()))
@@ -29,6 +32,7 @@ func (a *Agent) runReporterPipe(ctx context.Context) {
 	a.lg.InfoCtx(ctx, "finished")
 }
 
+// loadMetrics loads metrics from various sources in parallel using errgroup
 func (a *Agent) loadMetrics(ctx context.Context, g *errgroup.Group) chan *models.Metric {
 	metrics := make(chan *models.Metric)
 
@@ -94,6 +98,7 @@ func (a *Agent) loadMetrics(ctx context.Context, g *errgroup.Group) chan *models
 	return metrics
 }
 
+// loadWithCancel loads a single metric from storage with context cancellation support
 func (a *Agent) loadWithCancel(
 	ctx context.Context,
 	r Reportable,
@@ -113,6 +118,7 @@ func (a *Agent) loadWithCancel(
 	return nil
 }
 
+// report sends metrics to the server in batches
 func (a *Agent) report(
 	ctx context.Context,
 	g *errgroup.Group,

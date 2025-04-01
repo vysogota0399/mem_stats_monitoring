@@ -18,6 +18,7 @@ type Config struct {
 	Key            string        `json:"key" env:"KEY"`
 	RateLimit      int           `json:"rate_limit" env:"RATE_LIMIT"`
 	ProfileAddress string        `json:"profile_address" env:"PROFILE_ADDRESS"`
+	MaxAttempts    uint8         `json:"max_attempts" env:"MAX_ATTEMPTS" envDefault:"5"`
 }
 
 func NewConfig() (Config, error) {
@@ -60,6 +61,16 @@ func NewConfig() (Config, error) {
 			return c, err
 		}
 		c.RateLimit = int(rLimit)
+	}
+
+	if val, ok := os.LookupEnv("MAX_ATTEMPTS"); ok {
+		maxAttempts, err := strconv.ParseUint(val, 10, 8)
+		if err != nil {
+			return c, err
+		}
+		c.MaxAttempts = uint8(maxAttempts)
+	} else {
+		c.MaxAttempts = 5
 	}
 
 	c.ServerURL = fmt.Sprintf("http://%s", c.ServerURL)

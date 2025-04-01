@@ -59,15 +59,21 @@ func (a *Agent) saveMetrics(ctx context.Context, g *errgroup.Group, metrics <-ch
 func (a *Agent) genMetrics(ctx context.Context, g *errgroup.Group) chan *models.Metric {
 	wg := &sync.WaitGroup{}
 	metrics := make(chan *models.Metric)
-	a.genRuntimeMetrics(ctx, wg, g, metrics, true)
-	a.genCustromMetrics(ctx, wg, g, metrics, true)
-	a.genVirtualMemoryMetrics(ctx, wg, g, metrics, true)
-	a.genCPUMetrics(ctx, wg, g, metrics, true)
+	done := make(chan struct{})
 
-	go func() {
+	// Start all metric generators
+	a.genRuntimeMetrics(ctx, wg, g, metrics, done, true)
+	a.genCustromMetrics(ctx, wg, g, metrics, done, true)
+	a.genVirtualMemoryMetrics(ctx, wg, g, metrics, done, true)
+	a.genCPUMetrics(ctx, wg, g, metrics, done, true)
+
+	// Close metrics channel when all generators are done
+	g.Go(func() error {
 		wg.Wait()
+		close(done)
 		close(metrics)
-	}()
+		return nil
+	})
 
 	return metrics
 }
@@ -77,11 +83,11 @@ func (a *Agent) genCPUMetrics(
 	wg *sync.WaitGroup,
 	g *errgroup.Group,
 	metrics chan *models.Metric,
+	done chan struct{},
 	fromPool bool,
 ) {
-
+	wg.Add(1)
 	g.Go(func() error {
-		wg.Add(1)
 		defer wg.Done()
 
 		stats, err := cpu.Info()
@@ -94,24 +100,41 @@ func (a *Agent) genCPUMetrics(
 			case <-ctx.Done():
 				a.lg.InfoCtx(ctx, "genCPUMetrics context done with context cancellation")
 				return nil
+			case <-done:
+				return nil
 			default:
 				val, err := convertToStr(m.generateValue(stats))
 				if err != nil {
 					return fmt.Errorf("internal/agent/poller_pipe convert to str error %w", err)
 				}
 
+				var res *models.Metric
 				if fromPool {
-					res := a.metricsPool.Get()
+					res = a.metricsPool.Get()
 					res.Name = m.Name
 					res.Type = m.Type
 					res.Value = val
-					metrics <- res
 				} else {
-					metrics <- &models.Metric{
+					res = &models.Metric{
 						Name:  m.Name,
 						Type:  m.Type,
 						Value: val,
 					}
+				}
+
+				select {
+				case metrics <- res:
+				case <-ctx.Done():
+					if fromPool {
+						a.metricsPool.Put(res)
+					}
+					a.lg.InfoCtx(ctx, "genCPUMetrics context done with context cancellation")
+					return nil
+				case <-done:
+					if fromPool {
+						a.metricsPool.Put(res)
+					}
+					return nil
 				}
 			}
 		}
@@ -125,10 +148,11 @@ func (a *Agent) genVirtualMemoryMetrics(
 	wg *sync.WaitGroup,
 	g *errgroup.Group,
 	metrics chan *models.Metric,
+	done chan struct{},
 	fromPool bool,
 ) {
+	wg.Add(1)
 	g.Go(func() error {
-		wg.Add(1)
 		defer wg.Done()
 
 		stat, err := mem.VirtualMemory()
@@ -141,25 +165,41 @@ func (a *Agent) genVirtualMemoryMetrics(
 			case <-ctx.Done():
 				a.lg.InfoCtx(ctx, "genVirtualMemoryMetrics context done with context cancellation")
 				return nil
+			case <-done:
+				return nil
 			default:
 				val, err := convertToStr(m.generateValue(stat))
 				if err != nil {
 					return fmt.Errorf("internal/agent/poller_pipe convert to str error %w", err)
 				}
 
+				var res *models.Metric
 				if fromPool {
-					res := a.metricsPool.Get()
+					res = a.metricsPool.Get()
 					res.Name = m.Name
 					res.Type = m.Type
 					res.Value = val
-
-					metrics <- res
 				} else {
-					metrics <- &models.Metric{
+					res = &models.Metric{
 						Name:  m.Name,
 						Type:  m.Type,
 						Value: val,
 					}
+				}
+
+				select {
+				case metrics <- res:
+				case <-ctx.Done():
+					if fromPool {
+						a.metricsPool.Put(res)
+					}
+					a.lg.InfoCtx(ctx, "genVirtualMemoryMetrics context done with context cancellation")
+					return nil
+				case <-done:
+					if fromPool {
+						a.metricsPool.Put(res)
+					}
+					return nil
 				}
 			}
 		}
@@ -173,16 +213,19 @@ func (a *Agent) genCustromMetrics(
 	wg *sync.WaitGroup,
 	g *errgroup.Group,
 	metrics chan *models.Metric,
+	done chan struct{},
 	fromPool bool,
 ) {
+	wg.Add(1)
 	g.Go(func() error {
-		wg.Add(1)
 		defer wg.Done()
 
 		for _, m := range a.customMetrics {
 			select {
 			case <-ctx.Done():
 				a.lg.InfoCtx(ctx, "genCustromMetrics context done with context cancellation")
+				return nil
+			case <-done:
 				return nil
 			default:
 				val, err := m.generateValue(&m, a)
@@ -195,18 +238,33 @@ func (a *Agent) genCustromMetrics(
 					return fmt.Errorf("internal/agent/poller_pipe generate val error %w", err)
 				}
 
+				var res *models.Metric
 				if fromPool {
-					res := a.metricsPool.Get()
+					res = a.metricsPool.Get()
 					res.Name = m.Name
 					res.Type = m.Type
 					res.Value = sVal
-					metrics <- res
 				} else {
-					metrics <- &models.Metric{
+					res = &models.Metric{
 						Name:  m.Name,
 						Type:  m.Type,
 						Value: sVal,
 					}
+				}
+
+				select {
+				case metrics <- res:
+				case <-ctx.Done():
+					if fromPool {
+						a.metricsPool.Put(res)
+					}
+					a.lg.InfoCtx(ctx, "genCustromMetrics context done with context cancellation")
+					return nil
+				case <-done:
+					if fromPool {
+						a.metricsPool.Put(res)
+					}
+					return nil
 				}
 			}
 		}
@@ -220,10 +278,11 @@ func (a *Agent) genRuntimeMetrics(
 	wg *sync.WaitGroup,
 	g *errgroup.Group,
 	metrics chan *models.Metric,
+	done chan struct{},
 	fromPool bool,
 ) {
+	wg.Add(1)
 	g.Go(func() error {
-		wg.Add(1)
 		defer wg.Done()
 
 		memStat := &runtime.MemStats{}
@@ -234,24 +293,41 @@ func (a *Agent) genRuntimeMetrics(
 			case <-ctx.Done():
 				a.lg.InfoCtx(ctx, "genRuntimeMetrics context done with context cancellation")
 				return nil
+			case <-done:
+				return nil
 			default:
 				val, err := convertToStr(m.generateValue(memStat))
 				if err != nil {
 					return fmt.Errorf("internal/agent/poller_pipe convert to str error %w", err)
 				}
 
+				var res *models.Metric
 				if fromPool {
-					res := a.metricsPool.Get()
+					res = a.metricsPool.Get()
 					res.Name = m.Name
 					res.Type = m.Type
 					res.Value = val
-					metrics <- res
 				} else {
-					metrics <- &models.Metric{
+					res = &models.Metric{
 						Name:  m.Name,
 						Type:  m.Type,
 						Value: val,
 					}
+				}
+
+				select {
+				case metrics <- res:
+				case <-ctx.Done():
+					if fromPool {
+						a.metricsPool.Put(res)
+					}
+					a.lg.InfoCtx(ctx, "genRuntimeMetrics context done with context cancellation")
+					return nil
+				case <-done:
+					if fromPool {
+						a.metricsPool.Put(res)
+					}
+					return nil
 				}
 			}
 		}
