@@ -143,11 +143,13 @@ tasks:
   server-test-coverage:
     dir: internal/server
     cmds:
-      - go test ./... -coverprofile=coverage.out
+      - go clean -testcache
+      - go test -count 1 ./... -coverprofile=coverage.out
       - go tool cover -func=coverage.out
 
   agent-test-coverage:
     dir: internal/agent
     cmds:
+    - go clean -testcache
     - go test ./... -coverprofile=coverage.out
     - go tool cover -func=coverage.out

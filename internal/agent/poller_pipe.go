@@ -14,7 +14,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func (a *Agent) runPollerPipe(ctx context.Context) {
+func (a *Agent) runPollerPipe(ctx context.Context) error {
 	operationID := uuid.NewV4()
 	ctx = a.lg.WithContextFields(ctx, zap.String("operation_id", operationID.String()))
 	a.lg.DebugCtx(ctx, "start")
@@ -24,21 +24,18 @@ func (a *Agent) runPollerPipe(ctx context.Context) {
 	a.saveMetrics(ctx, g, a.genMetrics(ctx, g))
 
 	if err := g.Wait(); err != nil {
-		a.lg.ErrorCtx(ctx, "collect metrics failed", zap.Error(err))
+		return fmt.Errorf("poller_pile: collect metrics failed error %w", err)
 	}
 
 	a.lg.DebugCtx(ctx, "finished")
+	return nil
 }
 
 func (a *Agent) saveMetrics(ctx context.Context, g *errgroup.Group, metrics <-chan *models.Metric) {
 	numWorkers := 10
-	wg := sync.WaitGroup{}
-	wg.Add(numWorkers)
 
-	for i := 0; i < numWorkers; i++ {
+	for range numWorkers {
 		g.Go(func() error {
-			defer wg.Done()
-
 			for m := range metrics {
 				select {
 				case <-ctx.Done():
@@ -57,18 +54,15 @@ func (a *Agent) saveMetrics(ctx context.Context, g *errgroup.Group, metrics <-ch
 			return nil
 		})
 	}
-
-	wg.Wait()
 }
 
 func (a *Agent) genMetrics(ctx context.Context, g *errgroup.Group) chan *models.Metric {
+	wg := &sync.WaitGroup{}
 	metrics := make(chan *models.Metric)
-	wg := sync.WaitGroup{}
-
-	a.genRuntimeMetrics(ctx, &wg, g, metrics, true)
-	a.genCustromMetrics(ctx, &wg, g, metrics, true)
-	a.genVirtualMemoryMetrics(ctx, &wg, g, metrics, true)
-	a.genCPUMetrics(ctx, &wg, g, metrics, true)
+	a.genRuntimeMetrics(ctx, wg, g, metrics, true)
+	a.genCustromMetrics(ctx, wg, g, metrics, true)
+	a.genVirtualMemoryMetrics(ctx, wg, g, metrics, true)
+	a.genCPUMetrics(ctx, wg, g, metrics, true)
 
 	go func() {
 		wg.Wait()
@@ -85,8 +79,9 @@ func (a *Agent) genCPUMetrics(
 	metrics chan *models.Metric,
 	fromPool bool,
 ) {
-	wg.Add(1)
+
 	g.Go(func() error {
+		wg.Add(1)
 		defer wg.Done()
 
 		stats, err := cpu.Info()
@@ -131,8 +126,8 @@ func (a *Agent) genVirtualMemoryMetrics(
 	metrics chan *models.Metric,
 	fromPool bool,
 ) {
-	wg.Add(1)
 	g.Go(func() error {
+		wg.Add(1)
 		defer wg.Done()
 
 		stat, err := mem.VirtualMemory()
@@ -178,8 +173,8 @@ func (a *Agent) genCustromMetrics(
 	metrics chan *models.Metric,
 	fromPool bool,
 ) {
-	wg.Add(1)
 	g.Go(func() error {
+		wg.Add(1)
 		defer wg.Done()
 
 		for _, m := range a.customMetrics {
@@ -224,8 +219,8 @@ func (a *Agent) genRuntimeMetrics(
 	metrics chan *models.Metric,
 	fromPool bool,
 ) {
-	wg.Add(1)
 	g.Go(func() error {
+		wg.Add(1)
 		defer wg.Done()
 
 		memStat := &runtime.MemStats{}

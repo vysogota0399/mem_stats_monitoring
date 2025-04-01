@@ -82,7 +82,10 @@ func (a *Agent) startPoller(ctx context.Context, wg *sync.WaitGroup) {
 			case <-ctx.Done():
 				return
 			default:
-				a.runPollerPipe(ctx)
+				if err := a.runPollerPipe(ctx); err != nil {
+					a.lg.ErrorCtx(ctx, "error in poller pipe", zap.Error(err))
+				}
+
 				a.lg.DebugCtx(ctx, "sleep", zap.Duration("dur", a.cfg.PollInterval))
 				time.Sleep(a.cfg.PollInterval)
 			}
