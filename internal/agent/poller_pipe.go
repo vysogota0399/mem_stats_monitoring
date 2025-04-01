@@ -92,6 +92,7 @@ func (a *Agent) genCPUMetrics(
 		for _, m := range a.cpuMetrics {
 			select {
 			case <-ctx.Done():
+				a.lg.InfoCtx(ctx, "genCPUMetrics context done with context cancellation")
 				return nil
 			default:
 				val, err := convertToStr(m.generateValue(stats))
@@ -138,6 +139,7 @@ func (a *Agent) genVirtualMemoryMetrics(
 		for _, m := range a.virtualMemoryMetrics {
 			select {
 			case <-ctx.Done():
+				a.lg.InfoCtx(ctx, "genVirtualMemoryMetrics context done with context cancellation")
 				return nil
 			default:
 				val, err := convertToStr(m.generateValue(stat))
@@ -180,6 +182,7 @@ func (a *Agent) genCustromMetrics(
 		for _, m := range a.customMetrics {
 			select {
 			case <-ctx.Done():
+				a.lg.InfoCtx(ctx, "genCustromMetrics context done with context cancellation")
 				return nil
 			default:
 				val, err := m.generateValue(&m, a)
@@ -229,6 +232,7 @@ func (a *Agent) genRuntimeMetrics(
 		for _, m := range a.runtimeMetrics {
 			select {
 			case <-ctx.Done():
+				a.lg.InfoCtx(ctx, "genRuntimeMetrics context done with context cancellation")
 				return nil
 			default:
 				val, err := convertToStr(m.generateValue(memStat))

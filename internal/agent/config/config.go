@@ -17,6 +17,7 @@ type Config struct {
 	LogLevel       int64         `json:"log_level" env:"LOG_LEVEL" envDefault:"0"`
 	Key            string        `json:"key" env:"KEY"`
 	RateLimit      int           `json:"rate_limit" env:"RATE_LIMIT"`
+	ProfileAddress string        `json:"profile_address" env:"PROFILE_ADDRESS"`
 }
 
 func NewConfig() (Config, error) {
@@ -72,8 +73,8 @@ func (c *Config) String() string {
 
 func (c *Config) parseFlags() {
 	var (
-		pollInterval        int64
-		reportInterval      int64
+		pollInterval   int64
+		reportInterval int64
 	)
 
 	const (

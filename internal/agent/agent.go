@@ -17,7 +17,7 @@ import (
 	"go.uber.org/zap"
 )
 
-type httpClient interface {
+type HttpClient interface {
 	UpdateMetric(ctx context.Context, mType, mName, value string) error
 	UpdateMetrics(ctx context.Context, data []*models.Metric) error
 }
@@ -26,7 +26,7 @@ type Agent struct {
 	lg                   *logging.ZapLogger
 	storage              storage.Storage
 	cfg                  config.Config
-	httpClient           httpClient
+	httpClient           HttpClient
 	runtimeMetrics       []RuntimeMetric
 	customMetrics        []CustomMetric
 	virtualMemoryMetrics []VirtualMemoryMetric
@@ -49,8 +49,8 @@ func NewAgent(lg *logging.ZapLogger, cfg config.Config, store storage.Storage) *
 }
 
 // Start запускает несколько горутин.
-// startPoller - сборк метрик
-// startReporter - формирование отчета
+// startPoller - сборка метрик
+// startReporter - отправка метрик
 func (a *Agent) Start(ctx context.Context) {
 	wg := sync.WaitGroup{}
 
@@ -63,8 +63,12 @@ func (a *Agent) Start(ctx context.Context) {
 }
 
 func (a *Agent) startProfiler() {
+	if a.cfg.ProfileAddress == "" {
+		return
+	}
+
 	go func() {
-		if err := http.ListenAndServe("localhost:6060", nil); err != nil {
+		if err := http.ListenAndServe(a.cfg.ProfileAddress, nil); err != nil {
 			panic(err)
 		}
 	}()
@@ -80,8 +84,10 @@ func (a *Agent) startPoller(ctx context.Context, wg *sync.WaitGroup) {
 		for {
 			select {
 			case <-ctx.Done():
+				a.lg.InfoCtx(ctx, "poller done with context cancellation")
 				return
 			default:
+				a.lg.InfoCtx(ctx, "poller start")
 				if err := a.runPollerPipe(ctx); err != nil {
 					a.lg.ErrorCtx(ctx, "error in poller pipe", zap.Error(err))
 				}
@@ -103,10 +109,12 @@ func (a Agent) startReporter(ctx context.Context, wg *sync.WaitGroup) {
 		for {
 			select {
 			case <-ctx.Done():
+				a.lg.InfoCtx(ctx, "reporter done with context cancellation")
 				return
 			case <-time.NewTicker(a.cfg.ReportInterval).C:
+				a.lg.InfoCtx(ctx, "reporter start")
 				a.runReporterPipe(ctx)
-				a.lg.DebugCtx(ctx, "sleep", zap.Duration("dur", a.cfg.PollInterval))
+				a.lg.DebugCtx(ctx, "sleep", zap.Duration("dur", a.cfg.ReportInterval))
 			}
 		}
 	}()

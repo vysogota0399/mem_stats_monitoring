@@ -5,12 +5,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/config"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/mocks"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/storage"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -37,7 +40,10 @@ func TestRunPollerPipe(t *testing.T) {
 	require.NoError(t, err)
 
 	store := storage.NewMemoryStorage(logger)
-	cfg, err := config.NewConfig()
+	cfg := config.Config{
+		PollInterval:   time.Millisecond * 900,
+		ReportInterval: time.Millisecond * 900,
+	}
 	assert.NoError(t, err)
 
 	agent := NewAgent(logger, cfg, store)
@@ -137,6 +143,81 @@ func TestConvertToStr(t *testing.T) {
 				assert.Equal(t, tc.expected, result)
 				assert.NoError(t, err)
 			}
+		})
+	}
+}
+
+func TestAgent_Start(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func(client *mocks.MockHttpClient) (context.Context, context.CancelFunc)
+		validate func(t *testing.T, ctx context.Context)
+	}{
+		{
+			name: "graceful shutdown",
+			setup: func(client *mocks.MockHttpClient) (context.Context, context.CancelFunc) {
+				client.EXPECT().UpdateMetric(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes().Return(nil)
+				client.EXPECT().UpdateMetrics(gomock.Any(), gomock.Any()).AnyTimes().AnyTimes().Return(nil)
+				return context.WithTimeout(context.Background(), 500*time.Millisecond)
+			},
+			validate: func(t *testing.T, ctx context.Context) {
+				assert.Equal(t, context.DeadlineExceeded, ctx.Err())
+			},
+		},
+		{
+			name: "context cancellation",
+			setup: func(client *mocks.MockHttpClient) (context.Context, context.CancelFunc) {
+				client.EXPECT().UpdateMetric(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes().Return(nil)
+				client.EXPECT().UpdateMetrics(gomock.Any(), gomock.Any()).AnyTimes().AnyTimes().Return(nil)
+				ctx, cancel := context.WithCancel(context.Background())
+				go func(cancel context.CancelFunc) {
+					time.Sleep(time.Second)
+					cancel()
+				}(cancel)
+
+				return ctx, cancel
+			},
+			validate: func(t *testing.T, ctx context.Context) {
+				assert.Equal(t, context.Canceled, ctx.Err())
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			cfg := config.Config{
+				PollInterval:   time.Millisecond * 900,
+				ReportInterval: time.Millisecond * 900,
+			}
+
+			mockClient := mocks.NewMockHttpClient(ctrl)
+			lg, err := logging.MustZapLogger(zap.DebugLevel)
+			assert.NoError(t, err)
+
+			agent := &Agent{
+				lg:                   lg,
+				storage:              storage.NewMemoryStorage(lg),
+				cfg:                  cfg,
+				httpClient:           mockClient,
+				runtimeMetrics:       runtimeMetricsDefinition,
+				customMetrics:        customMetricsDefinition,
+				virtualMemoryMetrics: virtualMemoryMetricsDefinition,
+				cpuMetrics:           cpuMetricsDefinition,
+				metricsPool:          NewMetricsPool(),
+			}
+
+			ctx, cancel := tt.setup(mockClient)
+			defer cancel()
+
+			go agent.Start(ctx)
+
+			// Wait for context to be done
+			<-ctx.Done()
+
+			tt.validate(t, ctx)
 		})
 	}
 }

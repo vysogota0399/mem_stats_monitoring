@@ -19,7 +19,6 @@ func BenchmarkAgent_genCustromMetrics(b *testing.B) {
 		lg            *logging.ZapLogger
 		storage       *storage.Memory
 		cfg           config.Config
-		httpClient    httpClient
 		customMetrics []CustomMetric
 	}
 
@@ -82,7 +81,6 @@ func BenchmarkAgent_genRuntimeMetrics(b *testing.B) {
 		lg             *logging.ZapLogger
 		storage        *storage.Memory
 		cfg            config.Config
-		httpClient     httpClient
 		runtimeMetrics []RuntimeMetric
 	}
 
@@ -145,7 +143,6 @@ func BenchmarkAgent_genVirtualMemoryMetrics(b *testing.B) {
 		lg            *logging.ZapLogger
 		storage       *storage.Memory
 		cfg           config.Config
-		httpClient    httpClient
 		virtualMemory []VirtualMemoryMetric
 	}
 
@@ -208,7 +205,6 @@ func BenchmarkAgent_genCPUMetrics(b *testing.B) {
 		lg         *logging.ZapLogger
 		storage    *storage.Memory
 		cfg        config.Config
-		httpClient httpClient
 		cpuMetrics []CPUMetric
 	}
 
