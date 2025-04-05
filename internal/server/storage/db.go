@@ -5,13 +5,14 @@ import (
 	"database/sql"
 	"embed"
 	"errors"
-	"sync"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/config"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
@@ -19,28 +20,35 @@ import (
 	"go.uber.org/zap"
 )
 
+// DBStorage реализация интерфейса Storage. В качестве зранилища используется база данных postgresql.
 type DBStorage struct {
-	dbDsn          string
+	dbDsn          string // строка подключения к базе данных.
 	db             *sql.DB
 	lg             *logging.ZapLogger
-	maxOpenRetries uint8
+	maxOpenRetries uint8 // максимальное количетсво попыток открыть соединение.
 }
 
+// All возвращает все записи из базы данных.
 func (s *DBStorage) All() map[string]map[string][]string {
 	s.lg.WarnCtx(context.Background(), "useless method")
 	return make(map[string]map[string][]string)
 }
 
+// Last возвращает последнюю запись из базы данных.
+// Deprecated: исторически так сложилось.
 func (s *DBStorage) Last(mType, mName string) (string, error) {
 	s.lg.WarnCtx(context.Background(), "useless method")
 	return "", nil
 }
 
+// Push добавляет новую заись в базу данных.
+// Deprecated: исторически так сложилось.
 func (s *DBStorage) Push(mType, mName string, val any) error {
 	s.lg.WarnCtx(context.Background(), "useless method")
 	return nil
 }
 
+// Ping проверяет соединение с бащой данных.
 func (s *DBStorage) Ping() error {
 	return s.db.Ping()
 }
@@ -57,7 +65,7 @@ type DBAble interface {
 
 const pgxDriver string = "pgx"
 
-func NewDBStorage(ctx context.Context, cfg config.Config, wg *sync.WaitGroup, lg *logging.ZapLogger) (Storage, error) {
+func NewDBStorage(ctx context.Context, cfg config.Config, errg *errgroup.Group, lg *logging.ZapLogger) (Storage, error) {
 	strg := &DBStorage{
 		lg:             lg,
 		dbDsn:          cfg.DatabaseDSN,
@@ -74,19 +82,15 @@ func NewDBStorage(ctx context.Context, cfg config.Config, wg *sync.WaitGroup, lg
 	}
 
 	ctx = lg.WithContextFields(ctx, zap.String("name", "db_storage"))
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
 
+	errg.Go(func() error {
 		<-ctx.Done()
 		if err := strg.db.Close(); err != nil {
-			lg.FatalCtx(
-				ctx,
-				"close db failed",
-				zap.Error(err),
-			)
+			return fmt.Errorf("db: close db failed error %w", err)
 		}
-	}()
+
+		return nil
+	})
 
 	return strg, nil
 }

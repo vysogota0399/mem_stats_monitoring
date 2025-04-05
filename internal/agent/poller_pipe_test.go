@@ -19,7 +19,6 @@ func BenchmarkAgent_genCustromMetrics(b *testing.B) {
 		lg            *logging.ZapLogger
 		storage       *storage.Memory
 		cfg           config.Config
-		httpClient    httpClient
 		customMetrics []CustomMetric
 	}
 
@@ -46,6 +45,7 @@ func BenchmarkAgent_genCustromMetrics(b *testing.B) {
 
 	b.Run("fetch objects from pool", func(b *testing.B) {
 		resChan := make(chan *models.Metric)
+		done := make(chan struct{})
 		go func(c chan *models.Metric) { <-c }(resChan)
 
 		for i := 0; i < b.N; i++ {
@@ -54,6 +54,7 @@ func BenchmarkAgent_genCustromMetrics(b *testing.B) {
 				&wg,
 				errg,
 				resChan,
+				done,
 				true,
 			)
 		}
@@ -61,6 +62,7 @@ func BenchmarkAgent_genCustromMetrics(b *testing.B) {
 
 	b.Run("allocates new object", func(b *testing.B) {
 		resChan := make(chan *models.Metric)
+		done := make(chan struct{})
 		go func(c chan *models.Metric) {
 			agent.metricsPool.Put(<-c)
 		}(resChan)
@@ -71,6 +73,7 @@ func BenchmarkAgent_genCustromMetrics(b *testing.B) {
 				&wg,
 				errg,
 				resChan,
+				done,
 				true,
 			)
 		}
@@ -82,7 +85,6 @@ func BenchmarkAgent_genRuntimeMetrics(b *testing.B) {
 		lg             *logging.ZapLogger
 		storage        *storage.Memory
 		cfg            config.Config
-		httpClient     httpClient
 		runtimeMetrics []RuntimeMetric
 	}
 
@@ -109,6 +111,7 @@ func BenchmarkAgent_genRuntimeMetrics(b *testing.B) {
 
 	b.Run("fetch objects from pool", func(b *testing.B) {
 		resChan := make(chan *models.Metric)
+		done := make(chan struct{})
 		go func(c chan *models.Metric) {
 			agent.metricsPool.Put(<-c)
 		}(resChan)
@@ -119,6 +122,7 @@ func BenchmarkAgent_genRuntimeMetrics(b *testing.B) {
 				&wg,
 				errg,
 				resChan,
+				done,
 				true,
 			)
 		}
@@ -126,6 +130,7 @@ func BenchmarkAgent_genRuntimeMetrics(b *testing.B) {
 
 	b.Run("allocates new object", func(b *testing.B) {
 		resChan := make(chan *models.Metric)
+		done := make(chan struct{})
 		go func(c chan *models.Metric) { <-c }(resChan)
 
 		for b.Loop() {
@@ -134,6 +139,7 @@ func BenchmarkAgent_genRuntimeMetrics(b *testing.B) {
 				&wg,
 				errg,
 				resChan,
+				done,
 				false,
 			)
 		}
@@ -145,7 +151,6 @@ func BenchmarkAgent_genVirtualMemoryMetrics(b *testing.B) {
 		lg            *logging.ZapLogger
 		storage       *storage.Memory
 		cfg           config.Config
-		httpClient    httpClient
 		virtualMemory []VirtualMemoryMetric
 	}
 
@@ -172,6 +177,7 @@ func BenchmarkAgent_genVirtualMemoryMetrics(b *testing.B) {
 
 	b.Run("fetch objects from pool", func(b *testing.B) {
 		resChan := make(chan *models.Metric)
+		done := make(chan struct{})
 		go func(c chan *models.Metric) {
 			agent.metricsPool.Put(<-c)
 		}(resChan)
@@ -182,6 +188,7 @@ func BenchmarkAgent_genVirtualMemoryMetrics(b *testing.B) {
 				&wg,
 				errg,
 				resChan,
+				done,
 				true,
 			)
 		}
@@ -189,6 +196,7 @@ func BenchmarkAgent_genVirtualMemoryMetrics(b *testing.B) {
 
 	b.Run("allocate new object", func(b *testing.B) {
 		resChan := make(chan *models.Metric)
+		done := make(chan struct{})
 		go func(c chan *models.Metric) { <-c }(resChan)
 
 		for i := 0; i < b.N; i++ {
@@ -197,6 +205,7 @@ func BenchmarkAgent_genVirtualMemoryMetrics(b *testing.B) {
 				&wg,
 				errg,
 				resChan,
+				done,
 				false,
 			)
 		}
@@ -208,7 +217,6 @@ func BenchmarkAgent_genCPUMetrics(b *testing.B) {
 		lg         *logging.ZapLogger
 		storage    *storage.Memory
 		cfg        config.Config
-		httpClient httpClient
 		cpuMetrics []CPUMetric
 	}
 
@@ -235,6 +243,7 @@ func BenchmarkAgent_genCPUMetrics(b *testing.B) {
 
 	b.Run("fetch objects from pool", func(b *testing.B) {
 		resChan := make(chan *models.Metric)
+		done := make(chan struct{})
 		go func(c chan *models.Metric) {
 			agent.metricsPool.Put(<-c)
 		}(resChan)
@@ -245,6 +254,7 @@ func BenchmarkAgent_genCPUMetrics(b *testing.B) {
 				&wg,
 				errg,
 				resChan,
+				done,
 				true,
 			)
 		}
@@ -252,6 +262,7 @@ func BenchmarkAgent_genCPUMetrics(b *testing.B) {
 
 	b.Run("allocate new object", func(b *testing.B) {
 		resChan := make(chan *models.Metric)
+		done := make(chan struct{})
 		go func(c chan *models.Metric) { <-c }(resChan)
 		for b.Loop() {
 			agent.genCPUMetrics(
@@ -259,6 +270,7 @@ func BenchmarkAgent_genCPUMetrics(b *testing.B) {
 				&wg,
 				errg,
 				resChan,
+				done,
 				false,
 			)
 		}

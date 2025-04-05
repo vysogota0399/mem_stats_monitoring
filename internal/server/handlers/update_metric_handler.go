@@ -59,7 +59,7 @@ func updateMetricHandlerFunc(h *UpdateMetricHandler) gin.HandlerFunc {
 }
 
 func updateMetrics(ctx context.Context, m Metric, strg storage.Storage) error {
-	if m.Type != "gauge" && m.Type != "counter" {
+	if m.Type != models.GaugeType && m.Type != models.CounterType {
 		return fmt.Errorf("update_metric_service: underfined metric type: %s", m.Type)
 	}
 
@@ -85,7 +85,7 @@ func processGauge(ctx context.Context, m *Metric, strg storage.Storage) error {
 	}
 
 	rep := repositories.NewGauge(strg)
-	if _, err := rep.Craete(ctx, &g); err != nil {
+	if _, err := rep.Create(ctx, &g); err != nil {
 		return err
 	}
 
@@ -99,7 +99,7 @@ func processCounter(ctx context.Context, m *Metric, strg storage.Storage) error 
 	}
 
 	rep := repositories.NewCounter(strg)
-	if _, err := rep.Craete(ctx, &c); err != nil {
+	if _, err := rep.Create(ctx, &c); err != nil {
 		return err
 	}
 

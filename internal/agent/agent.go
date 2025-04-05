@@ -3,10 +3,11 @@ package agent
 import (
 	"context"
 	"fmt"
-	"os"
-	"runtime/pprof"
+	"net/http"
 	"sync"
 	"time"
+
+	_ "net/http/pprof"
 
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/clients"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/config"
@@ -16,16 +17,18 @@ import (
 	"go.uber.org/zap"
 )
 
-type httpClient interface {
+// HTTPClient defines the interface for making HTTP requests to the metrics server
+type HTTPClient interface {
 	UpdateMetric(ctx context.Context, mType, mName, value string) error
 	UpdateMetrics(ctx context.Context, data []*models.Metric) error
 }
 
+// Agent handles the collection and reporting of system metrics
 type Agent struct {
 	lg                   *logging.ZapLogger
 	storage              storage.Storage
 	cfg                  config.Config
-	httpClient           httpClient
+	httpClient           HTTPClient
 	runtimeMetrics       []RuntimeMetric
 	customMetrics        []CustomMetric
 	virtualMemoryMetrics []VirtualMemoryMetric
@@ -33,6 +36,7 @@ type Agent struct {
 	metricsPool          *MetricsPool
 }
 
+// NewAgent creates a new Agent instance with the specified configuration
 func NewAgent(lg *logging.ZapLogger, cfg config.Config, store storage.Storage) *Agent {
 	return &Agent{
 		lg:                   lg,
@@ -46,53 +50,35 @@ func NewAgent(lg *logging.ZapLogger, cfg config.Config, store storage.Storage) *
 		metricsPool:          NewMetricsPool(),
 	}
 }
+
+// Start launches multiple goroutines:
+// - startPoller: collects metrics
+// - startReporter: sends metrics to the server
 func (a *Agent) Start(ctx context.Context) {
 	wg := sync.WaitGroup{}
-	a.startProfile(ctx, &wg)
 
 	ctx = a.lg.WithContextFields(ctx, zap.String("name", "agent"))
 	a.lg.InfoCtx(ctx, "init", zap.Any("config", a.cfg))
+	a.startProfiler()
 	a.startPoller(ctx, &wg)
 	a.startReporter(ctx, &wg)
 	wg.Wait()
 }
 
-func (a *Agent) startProfile(ctx context.Context, wg *sync.WaitGroup) {
-	if a.cfg.PProfDuration == 0 {
+// startProfiler starts the HTTP profiler server if configured
+func (a *Agent) startProfiler() {
+	if a.cfg.ProfileAddress == "" {
 		return
 	}
 
-	wg.Add(1)
-
-	fmem, err := os.Create(`profiles/agent/profile.pb`)
-	if err != nil {
-		panic(err)
-	}
-
 	go func() {
-		defer wg.Done()
-		defer fmem.Close()
-
-		ctx, cancel := context.WithTimeout(ctx, a.cfg.PProfDuration)
-		defer cancel()
-
-		<-ctx.Done()
-
-		if err := pprof.WriteHeapProfile(fmem); err != nil {
-			a.lg.ErrorCtx(
-				ctx,
-				"write profile failed",
-				zap.Error(err),
-			)
-		} else {
-			a.lg.DebugCtx(
-				ctx,
-				"write profile finished",
-			)
+		if err := http.ListenAndServe(a.cfg.ProfileAddress, nil); err != nil {
+			panic(err)
 		}
 	}()
 }
 
+// startPoller launches a goroutine that periodically collects system metrics
 func (a *Agent) startPoller(ctx context.Context, wg *sync.WaitGroup) {
 	wg.Add(1)
 
@@ -103,9 +89,14 @@ func (a *Agent) startPoller(ctx context.Context, wg *sync.WaitGroup) {
 		for {
 			select {
 			case <-ctx.Done():
+				a.lg.InfoCtx(ctx, "poller done with context cancellation")
 				return
 			default:
-				a.runPollerPipe(ctx)
+				a.lg.InfoCtx(ctx, "poller start")
+				if err := a.runPollerPipe(ctx); err != nil {
+					a.lg.ErrorCtx(ctx, "error in poller pipe", zap.Error(err))
+				}
+
 				a.lg.DebugCtx(ctx, "sleep", zap.Duration("dur", a.cfg.PollInterval))
 				time.Sleep(a.cfg.PollInterval)
 			}
@@ -113,6 +104,7 @@ func (a *Agent) startPoller(ctx context.Context, wg *sync.WaitGroup) {
 	}()
 }
 
+// startReporter launches a goroutine that periodically sends collected metrics to the server
 func (a Agent) startReporter(ctx context.Context, wg *sync.WaitGroup) {
 	wg.Add(1)
 
@@ -123,15 +115,18 @@ func (a Agent) startReporter(ctx context.Context, wg *sync.WaitGroup) {
 		for {
 			select {
 			case <-ctx.Done():
+				a.lg.InfoCtx(ctx, "reporter done with context cancellation")
 				return
 			case <-time.NewTicker(a.cfg.ReportInterval).C:
+				a.lg.InfoCtx(ctx, "reporter start")
 				a.runReporterPipe(ctx)
-				a.lg.DebugCtx(ctx, "sleep", zap.Duration("dur", a.cfg.PollInterval))
+				a.lg.DebugCtx(ctx, "sleep", zap.Duration("dur", a.cfg.ReportInterval))
 			}
 		}
 	}()
 }
 
+// convertToStr converts various numeric types to their string representation
 func convertToStr(val any) (string, error) {
 	switch val2 := val.(type) {
 	case uint32:

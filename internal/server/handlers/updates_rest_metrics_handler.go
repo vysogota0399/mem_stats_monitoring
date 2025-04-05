@@ -12,27 +12,28 @@ import (
 	"go.uber.org/zap"
 )
 
-type UpdateMetricsService interface {
+type IUpdateMetricsService interface {
 	Call(context.Context, service.UpdateMetricsServiceParams) (*service.UpdateMetricsServiceResult, error)
 }
 
-type UpdatesRestMetricHandler struct {
+// UpdatesRestMetricsHandler обработчик позволяет сохранить пачку произвольных метрик.
+type UpdatesRestMetricsHandler struct {
 	storage storage.Storage
-	service UpdateMetricsService
+	service IUpdateMetricsService
 	lg      *logging.ZapLogger
 }
 
-func NewUpdatesRestMetricHandler(s storage.Storage, srvc *service.Service, lg *logging.ZapLogger) gin.HandlerFunc {
-	return updatesRestMetricHandlerFunc(
-		&UpdatesRestMetricHandler{
+func NewUpdatesRestMetricsHandler(s storage.Storage, srvc IUpdateMetricsService, lg *logging.ZapLogger) gin.HandlerFunc {
+	return UpdatesRestMetricsHandlerFunc(
+		&UpdatesRestMetricsHandler{
 			storage: s,
-			service: srvc.UpdateMetricsService,
+			service: srvc,
 			lg:      lg,
 		},
 	)
 }
 
-func updatesRestMetricHandlerFunc(h *UpdatesRestMetricHandler) gin.HandlerFunc {
+func UpdatesRestMetricsHandlerFunc(h *UpdatesRestMetricsHandler) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var params service.UpdateMetricsServiceParams
 		ctx := utils.InitHandlerCtx(c, h.lg, "updates_rest_metrics_handler")

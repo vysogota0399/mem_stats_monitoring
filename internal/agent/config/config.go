@@ -17,7 +17,8 @@ type Config struct {
 	LogLevel       int64         `json:"log_level" env:"LOG_LEVEL" envDefault:"0"`
 	Key            string        `json:"key" env:"KEY"`
 	RateLimit      int           `json:"rate_limit" env:"RATE_LIMIT"`
-	PProfDuration  time.Duration `json:"pprof_duration" env:"PPROF_DURATION"`
+	ProfileAddress string        `json:"profile_address" env:"PROFILE_ADDRESS"`
+	MaxAttempts    uint8         `json:"max_attempts" env:"MAX_ATTEMPTS" envDefault:"5"`
 }
 
 func NewConfig() (Config, error) {
@@ -62,12 +63,14 @@ func NewConfig() (Config, error) {
 		c.RateLimit = int(rLimit)
 	}
 
-	if val, ok := os.LookupEnv("PPROF_DURATION"); ok {
-		dur, err := strconv.ParseInt(val, 10, 8)
+	if val, ok := os.LookupEnv("MAX_ATTEMPTS"); ok {
+		maxAttempts, err := strconv.ParseUint(val, 10, 8)
 		if err != nil {
 			return c, err
 		}
-		c.PProfDuration = time.Duration(dur) * time.Second
+		c.MaxAttempts = uint8(maxAttempts)
+	} else {
+		c.MaxAttempts = 5
 	}
 
 	c.ServerURL = fmt.Sprintf("http://%s", c.ServerURL)
@@ -81,9 +84,8 @@ func (c *Config) String() string {
 
 func (c *Config) parseFlags() {
 	var (
-		pollInterval        int64
-		reportInterval      int64
-		pprofReportDuration int64
+		pollInterval   int64
+		reportInterval int64
 	)
 
 	const (
@@ -111,13 +113,8 @@ func (c *Config) parseFlags() {
 		flag.IntVar(&c.RateLimit, "l", runtime.GOMAXPROCS(0), "Reporter worker pool limit")
 	}
 
-	if flag.Lookup("ppf_rep_dur") == nil {
-		flag.Int64Var(&pprofReportDuration, "ppf_rep_path", 0, "Path to pprof report")
-	}
-
 	flag.Parse()
 
 	c.PollInterval = time.Duration(pollInterval) * time.Second
 	c.ReportInterval = time.Duration(reportInterval) * time.Second
-	c.PProfDuration = time.Duration(pprofReportDuration) * time.Second
 }

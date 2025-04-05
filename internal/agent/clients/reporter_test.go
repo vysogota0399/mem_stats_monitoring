@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"math/rand"
 	"net/http"
@@ -93,4 +94,383 @@ func BenchmarkReporter_bytesreader(b *testing.B) {
 			assert.NoError(b, err)
 		}
 	})
+}
+
+func TestNewReporter(t *testing.T) {
+	// Create test dependencies
+	lg, err := logging.MustZapLogger(zapcore.DebugLevel)
+	assert.NoError(t, err)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockClient := NewMockRequester(ctrl)
+	address := "http://test-server"
+
+	// Test the constructor
+	reporter := NewReporter(address, lg, mockClient)
+
+	// Verify all fields are properly initialized
+	assert.NotNil(t, reporter)
+	assert.Equal(t, address, reporter.address)
+	assert.Equal(t, lg, reporter.lg)
+	assert.Equal(t, mockClient, reporter.client)
+	assert.Equal(t, uint8(5), reporter.maxAttempts)
+	assert.Nil(t, reporter.compressor)
+	assert.Nil(t, reporter.secretKey)
+	assert.Nil(t, reporter.semaphore)
+}
+
+func TestReporter_UpdateMetric(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	lg, err := logging.MustZapLogger(zapcore.DebugLevel)
+	assert.NoError(t, err)
+
+	type fields struct {
+		client      *MockRequester
+		address     string
+		lg          *logging.ZapLogger
+		compressor  compressor
+		maxAttempts uint8
+		secretKey   []byte
+	}
+	type args struct {
+		ctx   context.Context
+		mType string
+		mName string
+		value string
+	}
+
+	type testCase struct {
+		name    string
+		fields  *fields
+		args    args
+		wantErr bool
+		prepare func(*fields)
+	}
+
+	tests := []testCase{
+		{
+			name: "successful gauge metric update",
+			fields: &fields{
+				client:      NewMockRequester(ctrl),
+				address:     "http://test-server",
+				lg:          lg,
+				compressor:  nil,
+				maxAttempts: 5,
+				secretKey:   nil,
+			},
+			args: args{
+				ctx:   context.Background(),
+				mType: models.GaugeType,
+				mName: "testGauge",
+				value: "123.45",
+			},
+			wantErr: false,
+			prepare: func(f *fields) {
+				f.client.EXPECT().
+					Request(gomock.Any()).
+					Return(&http.Response{
+						StatusCode: http.StatusOK,
+						Body:       io.NopCloser(bytes.NewBuffer(nil)),
+					}, nil)
+			},
+		},
+		{
+			name: "successful counter metric update",
+			fields: &fields{
+				client:      NewMockRequester(ctrl),
+				address:     "http://test-server",
+				lg:          lg,
+				compressor:  nil,
+				maxAttempts: 5,
+				secretKey:   nil,
+			},
+			args: args{
+				ctx:   context.Background(),
+				mType: models.CounterType,
+				mName: "testCounter",
+				value: "42",
+			},
+			wantErr: false,
+			prepare: func(f *fields) {
+				f.client.EXPECT().
+					Request(gomock.Any()).
+					Return(&http.Response{
+						StatusCode: http.StatusOK,
+						Body:       io.NopCloser(bytes.NewBuffer(nil)),
+					}, nil)
+			},
+		},
+		{
+			name: "invalid metric type",
+			fields: &fields{
+				client:      NewMockRequester(ctrl),
+				address:     "http://test-server",
+				lg:          lg,
+				compressor:  nil,
+				maxAttempts: 5,
+				secretKey:   nil,
+			},
+			args: args{
+				ctx:   context.Background(),
+				mType: "invalid",
+				mName: "testInvalid",
+				value: "123",
+			},
+			wantErr: true,
+			prepare: func(f *fields) {
+				// No mock expectations needed as error occurs before request
+			},
+		},
+		{
+			name: "client request error",
+			fields: &fields{
+				client:      NewMockRequester(ctrl),
+				address:     "http://test-server",
+				lg:          lg,
+				compressor:  nil,
+				secretKey:   nil,
+				maxAttempts: 1,
+			},
+			args: args{
+				ctx:   context.Background(),
+				mType: models.GaugeType,
+				mName: "testError",
+				value: "123",
+			},
+			wantErr: true,
+			prepare: func(f *fields) {
+				f.client.EXPECT().Request(gomock.Any()).Return(nil, errors.New("request failed"))
+			},
+		},
+		{
+			name: "unsuccessful response status",
+			fields: &fields{
+				client:      NewMockRequester(ctrl),
+				address:     "http://test-server",
+				lg:          lg,
+				compressor:  nil,
+				maxAttempts: 5,
+				secretKey:   nil,
+			},
+			args: args{
+				ctx:   context.Background(),
+				mType: models.GaugeType,
+				mName: "testBadStatus",
+				value: "123",
+			},
+			wantErr: true,
+			prepare: func(f *fields) {
+				f.client.EXPECT().
+					Request(gomock.Any()).
+					Return(&http.Response{
+						StatusCode: http.StatusBadRequest,
+						Body:       io.NopCloser(bytes.NewBuffer(nil)),
+					}, nil)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Prepare mock behavior
+			tt.prepare(tt.fields)
+
+			c := NewCompReporter(
+				tt.fields.address,
+				tt.fields.lg,
+				&config.Config{
+					RateLimit:   10,
+					MaxAttempts: tt.fields.maxAttempts,
+				},
+				tt.fields.client,
+			)
+
+			err := c.UpdateMetric(tt.args.ctx, tt.args.mType, tt.args.mName, tt.args.value)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestReporter_UpdateMetrics(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	lg, err := logging.MustZapLogger(zapcore.DebugLevel)
+	assert.NoError(t, err)
+
+	type fields struct {
+		client      *MockRequester
+		address     string
+		lg          *logging.ZapLogger
+		compressor  compressor
+		maxAttempts uint8
+		secretKey   []byte
+	}
+	type args struct {
+		ctx  context.Context
+		data []*models.Metric
+	}
+
+	type testCase struct {
+		name    string
+		fields  *fields
+		args    args
+		wantErr bool
+		prepare func(*fields)
+	}
+
+	tests := []testCase{
+		{
+			name: "successful batch update with mixed metrics",
+			fields: &fields{
+				client:      NewMockRequester(ctrl),
+				address:     "http://test-server",
+				lg:          lg,
+				compressor:  nil,
+				maxAttempts: 5,
+				secretKey:   nil,
+			},
+			args: args{
+				ctx: context.Background(),
+				data: []*models.Metric{
+					{Name: "gauge1", Type: models.GaugeType, Value: "123.45"},
+					{Name: "counter1", Type: models.CounterType, Value: "42"},
+				},
+			},
+			wantErr: false,
+			prepare: func(f *fields) {
+				f.client.EXPECT().
+					Request(gomock.Any()).
+					Return(&http.Response{
+						StatusCode: http.StatusOK,
+						Body:       io.NopCloser(bytes.NewBuffer(nil)),
+					}, nil)
+			},
+		},
+		{
+			name: "empty metrics batch",
+			fields: &fields{
+				client:      NewMockRequester(ctrl),
+				address:     "http://test-server",
+				lg:          lg,
+				compressor:  nil,
+				maxAttempts: 5,
+				secretKey:   nil,
+			},
+			args: args{
+				ctx:  context.Background(),
+				data: []*models.Metric{},
+			},
+			wantErr: false,
+			prepare: func(f *fields) {
+				f.client.EXPECT().
+					Request(gomock.Any()).
+					Return(&http.Response{
+						StatusCode: http.StatusOK,
+						Body:       io.NopCloser(bytes.NewBuffer(nil)),
+					}, nil)
+			},
+		},
+		{
+			name: "batch with invalid metric type",
+			fields: &fields{
+				client:      NewMockRequester(ctrl),
+				address:     "http://test-server",
+				lg:          lg,
+				compressor:  nil,
+				maxAttempts: 5,
+				secretKey:   nil,
+			},
+			args: args{
+				ctx: context.Background(),
+				data: []*models.Metric{
+					{Name: "valid", Type: models.GaugeType, Value: "123.45"},
+					{Name: "invalid", Type: "invalid_type", Value: "42"},
+				},
+			},
+			wantErr: true,
+			prepare: func(f *fields) {
+				// No expectations needed as validation should fail before request
+			},
+		},
+		{
+			name: "client request error",
+			fields: &fields{
+				client:      NewMockRequester(ctrl),
+				address:     "http://test-server",
+				lg:          lg,
+				compressor:  nil,
+				maxAttempts: 1,
+				secretKey:   nil,
+			},
+			args: args{
+				ctx: context.Background(),
+				data: []*models.Metric{
+					{Name: "metric1", Type: models.GaugeType, Value: "123.45"},
+				},
+			},
+			wantErr: true,
+			prepare: func(f *fields) {
+				f.client.EXPECT().Request(gomock.Any()).Return(nil, errors.New("request failed"))
+			},
+		},
+		{
+			name: "unsuccessful response status",
+			fields: &fields{
+				client:      NewMockRequester(ctrl),
+				address:     "http://test-server",
+				lg:          lg,
+				compressor:  nil,
+				maxAttempts: 5,
+				secretKey:   nil,
+			},
+			args: args{
+				ctx: context.Background(),
+				data: []*models.Metric{
+					{Name: "metric1", Type: models.GaugeType, Value: "123.45"},
+				},
+			},
+			wantErr: true,
+			prepare: func(f *fields) {
+				f.client.EXPECT().
+					Request(gomock.Any()).
+					Return(&http.Response{
+						StatusCode: http.StatusBadRequest,
+						Body:       io.NopCloser(bytes.NewBuffer(nil)),
+					}, nil)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Prepare mock behavior
+			tt.prepare(tt.fields)
+
+			c := NewCompReporter(
+				tt.fields.address,
+				tt.fields.lg,
+				&config.Config{
+					RateLimit:   10,
+					MaxAttempts: tt.fields.maxAttempts,
+				},
+				tt.fields.client,
+			)
+
+			err := c.UpdateMetrics(tt.args.ctx, tt.args.data)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
 }

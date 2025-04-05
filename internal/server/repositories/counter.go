@@ -12,6 +12,7 @@ import (
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
 )
 
+// Counter отвечает за связь уровня бизнес логики и persistence layer в контексте работы с Counter.
 type Counter struct {
 	storage storage.Storage
 	Records []models.Counter
@@ -24,7 +25,8 @@ func NewCounter(strg storage.Storage) *Counter {
 	}
 }
 
-func (c *Counter) Craete(ctx context.Context, record *models.Counter) (*models.Counter, error) {
+// Create сохраняет новую запись в хранилище.
+func (c *Counter) Create(ctx context.Context, record *models.Counter) (*models.Counter, error) {
 	record, err := c.processRec(ctx, record)
 	if err != nil {
 		return nil, err
@@ -73,6 +75,7 @@ func (c *Counter) pushToDB(ctx context.Context, s storage.DBAble, rec *models.Co
 	return rec, nil
 }
 
+// Last возвращает последнюю запись из хранилища.
 func (c Counter) Last(ctx context.Context, mName string) (*models.Counter, error) {
 	if s, ok := c.storage.(storage.DBAble); ok {
 		return c.lastFromDB(ctx, s, mName)
@@ -118,6 +121,7 @@ func (c Counter) lastFromMem(mName string) (*models.Counter, error) {
 	return &Counter, nil
 }
 
+// All возвращает все записи из хранилища.
 func (c Counter) All() map[string][]models.Counter { //nolint:dupl // :/
 	records := map[string][]models.Counter{}
 	mNames, ok := c.storage.All()[models.CounterType]
@@ -140,6 +144,7 @@ func (c Counter) All() map[string][]models.Counter { //nolint:dupl // :/
 	return records
 }
 
+// SaveCollection сохраняет пачку записей в хранилище
 func (c *Counter) SaveCollection(ctx context.Context, coll []models.Counter) ([]models.Counter, error) {
 	if s, ok := c.storage.(storage.DBAble); ok {
 		return c.saveCollToDB(ctx, s, coll)
@@ -200,6 +205,7 @@ func (c *Counter) saveCollToMem(coll []models.Counter) ([]models.Counter, error)
 	return coll, nil
 }
 
+// SearchByName осуществляет поиск записей по имени.
 func (c *Counter) SearchByName(ctx context.Context, names []string) (map[string]models.Counter, error) {
 	if s, ok := c.storage.(storage.DBAble); ok {
 		return c.searchSumByNameInDB(ctx, s, names)

@@ -13,28 +13,30 @@ import (
 	"go.uber.org/zap"
 )
 
+// Metrics передается в payload запроса.
 type Metrics struct {
-	ID    string   `json:"id" binding:"required"`   // имя метрики
-	MType string   `json:"type" binding:"required"` // параметр, принимающий значение gauge или counter
-	Delta *int64   `json:"delta,omitempty"`         // значение метрики в случае передачи counter
-	Value *float64 `json:"value,omitempty"`         // значение метрики в случае передачи gauge
+	ID    string   `json:"id" binding:"required"`   // имя метрики.
+	MType string   `json:"type" binding:"required"` // параметр, принимающий значение gauge или counter.
+	Delta *int64   `json:"delta,omitempty"`         // значение метрики в случае передачи counter.
+	Value *float64 `json:"value,omitempty"`         // значение метрики в случае передачи gauge.
 }
 
 type UpdateMetricService interface {
 	Call(context.Context, service.UpdateMetricServiceParams) (service.UpdateMetricServiceResult, error)
 }
 
+// UpdateRestMetricHandler обработчик позволяет сохранить произвольную метрику.
 type UpdateRestMetricHandler struct {
 	storage storage.Storage
 	service UpdateMetricService
 	lg      *logging.ZapLogger
 }
 
-func NewRestUpdateMetricHandler(s storage.Storage, srvc *service.Service, lg *logging.ZapLogger) gin.HandlerFunc {
+func NewRestUpdateMetricHandler(s storage.Storage, srvc UpdateMetricService, lg *logging.ZapLogger) gin.HandlerFunc {
 	return updateRestMetricHandlerFunc(
 		&UpdateRestMetricHandler{
 			storage: s,
-			service: srvc.UpdateMetricService,
+			service: srvc,
 			lg:      lg,
 		},
 	)

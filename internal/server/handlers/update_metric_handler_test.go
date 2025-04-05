@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/server/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
 )
 
@@ -84,6 +85,53 @@ func TestNewUpdateMetricHandler(t *testing.T) {
 			response := w.Result()
 			assert.Equal(t, tt.want.statusCode, response.StatusCode, "%s %s \n%v", tt.method, tt.url, tt.headers)
 			response.Body.Close()
+		})
+	}
+}
+
+func Test_updateMetrics(t *testing.T) {
+	type args struct {
+		ctx  context.Context
+		m    Metric
+		strg storage.Storage
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "returns failure when invalid type",
+			args: args{
+				ctx:  context.Background(),
+				m:    Metric{Type: "invalid"},
+				strg: storage.NewMemory(),
+			},
+			wantErr: true,
+		},
+		{
+			name: "when gauge - no errors",
+			args: args{
+				ctx:  context.Background(),
+				m:    Metric{Type: models.GaugeType},
+				strg: storage.NewMemory(),
+			},
+			wantErr: true,
+		},
+		{
+			name: "when counter - no errors",
+			args: args{
+				ctx:  context.Background(),
+				m:    Metric{Type: models.CounterType},
+				strg: storage.NewMemory(),
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := updateMetrics(tt.args.ctx, tt.args.m, tt.args.strg)
+			assert.Equal(t, tt.wantErr, err != nil)
 		})
 	}
 }

@@ -14,7 +14,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func (a *Agent) runPollerPipe(ctx context.Context) {
+func (a *Agent) runPollerPipe(ctx context.Context) error {
 	operationID := uuid.NewV4()
 	ctx = a.lg.WithContextFields(ctx, zap.String("operation_id", operationID.String()))
 	a.lg.DebugCtx(ctx, "start")
@@ -24,21 +24,18 @@ func (a *Agent) runPollerPipe(ctx context.Context) {
 	a.saveMetrics(ctx, g, a.genMetrics(ctx, g))
 
 	if err := g.Wait(); err != nil {
-		a.lg.ErrorCtx(ctx, "collect metrics failed", zap.Error(err))
+		return fmt.Errorf("poller_pile: collect metrics failed error %w", err)
 	}
 
 	a.lg.DebugCtx(ctx, "finished")
+	return nil
 }
 
 func (a *Agent) saveMetrics(ctx context.Context, g *errgroup.Group, metrics <-chan *models.Metric) {
 	numWorkers := 10
-	wg := sync.WaitGroup{}
-	wg.Add(numWorkers)
 
-	for i := 0; i < numWorkers; i++ {
+	for range numWorkers {
 		g.Go(func() error {
-			defer wg.Done()
-
 			for m := range metrics {
 				select {
 				case <-ctx.Done():
@@ -57,23 +54,26 @@ func (a *Agent) saveMetrics(ctx context.Context, g *errgroup.Group, metrics <-ch
 			return nil
 		})
 	}
-
-	wg.Wait()
 }
 
 func (a *Agent) genMetrics(ctx context.Context, g *errgroup.Group) chan *models.Metric {
+	wg := &sync.WaitGroup{}
 	metrics := make(chan *models.Metric)
-	wg := sync.WaitGroup{}
+	done := make(chan struct{})
 
-	a.genRuntimeMetrics(ctx, &wg, g, metrics, true)
-	a.genCustromMetrics(ctx, &wg, g, metrics, true)
-	a.genVirtualMemoryMetrics(ctx, &wg, g, metrics, true)
-	a.genCPUMetrics(ctx, &wg, g, metrics, true)
+	// Start all metric generators
+	a.genRuntimeMetrics(ctx, wg, g, metrics, done, true)
+	a.genCustromMetrics(ctx, wg, g, metrics, done, true)
+	a.genVirtualMemoryMetrics(ctx, wg, g, metrics, done, true)
+	a.genCPUMetrics(ctx, wg, g, metrics, done, true)
 
-	go func() {
+	// Close metrics channel when all generators are done
+	g.Go(func() error {
 		wg.Wait()
+		close(done)
 		close(metrics)
-	}()
+		return nil
+	})
 
 	return metrics
 }
@@ -83,6 +83,7 @@ func (a *Agent) genCPUMetrics(
 	wg *sync.WaitGroup,
 	g *errgroup.Group,
 	metrics chan *models.Metric,
+	done chan struct{},
 	fromPool bool,
 ) {
 	wg.Add(1)
@@ -97,6 +98,9 @@ func (a *Agent) genCPUMetrics(
 		for _, m := range a.cpuMetrics {
 			select {
 			case <-ctx.Done():
+				a.lg.InfoCtx(ctx, "genCPUMetrics context done with context cancellation")
+				return nil
+			case <-done:
 				return nil
 			default:
 				val, err := convertToStr(m.generateValue(stats))
@@ -104,18 +108,33 @@ func (a *Agent) genCPUMetrics(
 					return fmt.Errorf("internal/agent/poller_pipe convert to str error %w", err)
 				}
 
+				var res *models.Metric
 				if fromPool {
-					res := a.metricsPool.Get()
+					res = a.metricsPool.Get()
 					res.Name = m.Name
 					res.Type = m.Type
 					res.Value = val
-					metrics <- res
 				} else {
-					metrics <- &models.Metric{
+					res = &models.Metric{
 						Name:  m.Name,
 						Type:  m.Type,
 						Value: val,
 					}
+				}
+
+				select {
+				case metrics <- res:
+				case <-ctx.Done():
+					if fromPool {
+						a.metricsPool.Put(res)
+					}
+					a.lg.InfoCtx(ctx, "genCPUMetrics context done with context cancellation")
+					return nil
+				case <-done:
+					if fromPool {
+						a.metricsPool.Put(res)
+					}
+					return nil
 				}
 			}
 		}
@@ -129,6 +148,7 @@ func (a *Agent) genVirtualMemoryMetrics(
 	wg *sync.WaitGroup,
 	g *errgroup.Group,
 	metrics chan *models.Metric,
+	done chan struct{},
 	fromPool bool,
 ) {
 	wg.Add(1)
@@ -143,6 +163,9 @@ func (a *Agent) genVirtualMemoryMetrics(
 		for _, m := range a.virtualMemoryMetrics {
 			select {
 			case <-ctx.Done():
+				a.lg.InfoCtx(ctx, "genVirtualMemoryMetrics context done with context cancellation")
+				return nil
+			case <-done:
 				return nil
 			default:
 				val, err := convertToStr(m.generateValue(stat))
@@ -150,19 +173,33 @@ func (a *Agent) genVirtualMemoryMetrics(
 					return fmt.Errorf("internal/agent/poller_pipe convert to str error %w", err)
 				}
 
+				var res *models.Metric
 				if fromPool {
-					res := a.metricsPool.Get()
+					res = a.metricsPool.Get()
 					res.Name = m.Name
 					res.Type = m.Type
 					res.Value = val
-
-					metrics <- res
 				} else {
-					metrics <- &models.Metric{
+					res = &models.Metric{
 						Name:  m.Name,
 						Type:  m.Type,
 						Value: val,
 					}
+				}
+
+				select {
+				case metrics <- res:
+				case <-ctx.Done():
+					if fromPool {
+						a.metricsPool.Put(res)
+					}
+					a.lg.InfoCtx(ctx, "genVirtualMemoryMetrics context done with context cancellation")
+					return nil
+				case <-done:
+					if fromPool {
+						a.metricsPool.Put(res)
+					}
+					return nil
 				}
 			}
 		}
@@ -176,6 +213,7 @@ func (a *Agent) genCustromMetrics(
 	wg *sync.WaitGroup,
 	g *errgroup.Group,
 	metrics chan *models.Metric,
+	done chan struct{},
 	fromPool bool,
 ) {
 	wg.Add(1)
@@ -185,6 +223,9 @@ func (a *Agent) genCustromMetrics(
 		for _, m := range a.customMetrics {
 			select {
 			case <-ctx.Done():
+				a.lg.InfoCtx(ctx, "genCustromMetrics context done with context cancellation")
+				return nil
+			case <-done:
 				return nil
 			default:
 				val, err := m.generateValue(&m, a)
@@ -197,18 +238,33 @@ func (a *Agent) genCustromMetrics(
 					return fmt.Errorf("internal/agent/poller_pipe generate val error %w", err)
 				}
 
+				var res *models.Metric
 				if fromPool {
-					res := a.metricsPool.Get()
+					res = a.metricsPool.Get()
 					res.Name = m.Name
 					res.Type = m.Type
 					res.Value = sVal
-					metrics <- res
 				} else {
-					metrics <- &models.Metric{
+					res = &models.Metric{
 						Name:  m.Name,
 						Type:  m.Type,
 						Value: sVal,
 					}
+				}
+
+				select {
+				case metrics <- res:
+				case <-ctx.Done():
+					if fromPool {
+						a.metricsPool.Put(res)
+					}
+					a.lg.InfoCtx(ctx, "genCustromMetrics context done with context cancellation")
+					return nil
+				case <-done:
+					if fromPool {
+						a.metricsPool.Put(res)
+					}
+					return nil
 				}
 			}
 		}
@@ -222,6 +278,7 @@ func (a *Agent) genRuntimeMetrics(
 	wg *sync.WaitGroup,
 	g *errgroup.Group,
 	metrics chan *models.Metric,
+	done chan struct{},
 	fromPool bool,
 ) {
 	wg.Add(1)
@@ -234,6 +291,9 @@ func (a *Agent) genRuntimeMetrics(
 		for _, m := range a.runtimeMetrics {
 			select {
 			case <-ctx.Done():
+				a.lg.InfoCtx(ctx, "genRuntimeMetrics context done with context cancellation")
+				return nil
+			case <-done:
 				return nil
 			default:
 				val, err := convertToStr(m.generateValue(memStat))
@@ -241,18 +301,33 @@ func (a *Agent) genRuntimeMetrics(
 					return fmt.Errorf("internal/agent/poller_pipe convert to str error %w", err)
 				}
 
+				var res *models.Metric
 				if fromPool {
-					res := a.metricsPool.Get()
+					res = a.metricsPool.Get()
 					res.Name = m.Name
 					res.Type = m.Type
 					res.Value = val
-					metrics <- res
 				} else {
-					metrics <- &models.Metric{
+					res = &models.Metric{
 						Name:  m.Name,
 						Type:  m.Type,
 						Value: val,
 					}
+				}
+
+				select {
+				case metrics <- res:
+				case <-ctx.Done():
+					if fromPool {
+						a.metricsPool.Put(res)
+					}
+					a.lg.InfoCtx(ctx, "genRuntimeMetrics context done with context cancellation")
+					return nil
+				case <-done:
+					if fromPool {
+						a.metricsPool.Put(res)
+					}
+					return nil
 				}
 			}
 		}

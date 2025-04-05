@@ -13,24 +13,29 @@ import (
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/storage"
 )
 
+// MemValueGenerator is a function type that generates metric values from runtime memory statistics
 type MemValueGenerator func(*runtime.MemStats) any
 
+// Reportable interface defines the contract for metrics that can be loaded from storage
 type Reportable interface {
 	fromStore(s storage.Storage, target *models.Metric) error
 }
 
+// RuntimeMetric represents a metric that can be collected from runtime memory statistics
 type RuntimeMetric struct {
 	Name          string
 	Type          string
 	generateValue MemValueGenerator
 }
 
+// fromStore loads the metric value from storage
 func (m RuntimeMetric) fromStore(s storage.Storage, target *models.Metric) error {
 	target.Type = m.Type
 	target.Name = m.Name
 	return s.Get(target)
 }
 
+// runtimeMetricsDefinition defines the set of runtime memory metrics to collect
 var runtimeMetricsDefinition = []RuntimeMetric{
 	{
 		Name: "Alloc", Type: "gauge",

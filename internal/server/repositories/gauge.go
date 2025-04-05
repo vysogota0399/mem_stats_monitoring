@@ -10,6 +10,7 @@ import (
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
 )
 
+// Gauge отвечает за связь уровня бизнес логики и persistence layer в контексте работы с Gauge.
 type Gauge struct {
 	storage storage.Storage
 	Records []models.Gauge
@@ -22,7 +23,8 @@ func NewGauge(strg storage.Storage) *Gauge {
 	}
 }
 
-func (g *Gauge) Craete(ctx context.Context, record *models.Gauge) (*models.Gauge, error) {
+// Create сохраняет новую запись в хранилище.
+func (g *Gauge) Create(ctx context.Context, record *models.Gauge) (*models.Gauge, error) {
 	if s, ok := g.storage.(storage.DBAble); ok {
 		return g.pushToDB(ctx, s, record)
 	}
@@ -51,6 +53,7 @@ func (g *Gauge) pushToDB(ctx context.Context, s storage.DBAble, r *models.Gauge)
 	return r, nil
 }
 
+// Last возвращает последнюю запись из хранилища.
 func (g Gauge) Last(ctx context.Context, mName string) (*models.Gauge, error) {
 	if s, ok := g.storage.(storage.DBAble); ok {
 		return g.lastFromDB(ctx, s, mName)
@@ -96,6 +99,7 @@ func (g Gauge) lastFromMem(mName string) (*models.Gauge, error) {
 	return &gauge, nil
 }
 
+// All возвращает все записи из хранилища.
 func (g Gauge) All() map[string][]models.Gauge { //nolint:dupl // :/
 	records := map[string][]models.Gauge{}
 	mNames, ok := g.storage.All()[models.GaugeType]
@@ -106,7 +110,7 @@ func (g Gauge) All() map[string][]models.Gauge { //nolint:dupl // :/
 	for name, values := range mNames {
 		count := len(values)
 		collection := make([]models.Gauge, count)
-		for i := 0; i < count; i++ {
+		for i := range count {
 			collection[i] = models.Gauge{}
 			if err := json.Unmarshal([]byte(values[i]), &collection[i]); err != nil {
 				continue
@@ -118,6 +122,7 @@ func (g Gauge) All() map[string][]models.Gauge { //nolint:dupl // :/
 	return records
 }
 
+// SaveCollection сохраняет пачку записей в хранилище
 func (g *Gauge) SaveCollection(ctx context.Context, coll []models.Gauge) ([]models.Gauge, error) {
 	if s, ok := g.storage.(storage.DBAble); ok {
 		return g.saveCollToDB(ctx, s, coll)

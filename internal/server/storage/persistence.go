@@ -5,17 +5,18 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"log"
 	"os"
-	"sync"
 
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/config"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage/pubsub"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 const rwfmode fs.FileMode = 0666
@@ -34,7 +35,7 @@ type PersistentMemory struct {
 	dSource      dataSource
 }
 
-func NewFilePersistentMemory(ctx context.Context, c config.Config, wg *sync.WaitGroup, lg *logging.ZapLogger) (*PersistentMemory, error) {
+func NewFilePersistentMemory(ctx context.Context, c config.Config, errg *errgroup.Group, lg *logging.ZapLogger) (*PersistentMemory, error) {
 	to, err := os.OpenFile(c.FileStoragePath, os.O_CREATE|os.O_APPEND|os.O_RDWR, rwfmode)
 	if err != nil {
 		return nil, err
@@ -51,23 +52,22 @@ func NewFilePersistentMemory(ctx context.Context, c config.Config, wg *sync.Wait
 	}
 
 	if c.Restore {
-		go func() {
+		errg.Go(func() error {
 			if _, err := m.restore(); err != nil {
-				lg.ErrorCtx(ctx, "restore failed", zap.Error(err))
-				return
+				return fmt.Errorf("persistance: restore failed error %w", err)
 			}
-		}()
+
+			return nil
+		})
 	}
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
-		ps.Sb.Start(ctx, wg)
+	errg.Go(func() error {
+		ps.Sb.Start(ctx, errg)
 
 		<-m.ctx.Done()
 		lg.DebugCtx(ctx, "graceful shutdown")
-	}()
+		return nil
+	})
 
 	return m, nil
 }

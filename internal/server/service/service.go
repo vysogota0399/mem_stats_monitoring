@@ -5,6 +5,7 @@ import (
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
 )
 
+// Service выступает в качестве контейнера для хранения других сервисов отвечающих за бизнес логику.
 type Service struct {
 	UpdateMetricService  *UpdateMetricService
 	UpdateMetricsService *UpdateMetricsService
