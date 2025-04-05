@@ -72,7 +72,7 @@ func TestGauge_All(t *testing.T) {
 				),
 			},
 			want: map[string][]models.Gauge{
-				"testSetGet241": []models.Gauge{{Value: 120400.951, Name: "testSetGet241"}},
+				"testSetGet241": {{Value: 120400.951, Name: "testSetGet241"}},
 			},
 		},
 	}

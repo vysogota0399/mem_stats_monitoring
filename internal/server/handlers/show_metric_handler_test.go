@@ -83,7 +83,11 @@ func TestNewShowMetricHandler(t *testing.T) {
 
 			router.ServeHTTP(w, r)
 			response := w.Result()
-			defer response.Body.Close()
+			defer func() {
+				if err := response.Body.Close(); err != nil {
+					t.Errorf("failed to close response body: %v", err)
+				}
+			}()
 
 			assert.Equal(t, tt.want.statusCode, response.StatusCode)
 			assert.Equal(t, tt.want.response, w.Body.String())

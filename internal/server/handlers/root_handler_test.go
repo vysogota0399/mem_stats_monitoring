@@ -47,7 +47,11 @@ func TestNewRootHandler(t *testing.T) {
 
 			router.ServeHTTP(w, r)
 			response := w.Result()
-			defer response.Body.Close()
+			defer func() {
+				if err := response.Body.Close(); err != nil {
+					t.Errorf("failed to close response body: %v", err)
+				}
+			}()
 
 			assert.Equal(t, http.StatusOK, response.StatusCode)
 		})

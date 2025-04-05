@@ -116,8 +116,8 @@ func (c *Reporter) UpdateMetric(ctx context.Context, mType, mName, value string)
 		return fmt.Errorf("internal/agent/clients/reporter: send request err: %w", err)
 	}
 	defer func() {
-		if closeErr := resp.Body.Close(); closeErr != nil {
-			c.lg.ErrorCtx(ctx, "failed to close response body", zap.Error(closeErr))
+		if err := resp.Body.Close(); err != nil {
+			c.lg.ErrorCtx(ctx, "failed to close response body", zap.Error(err))
 		}
 	}()
 
@@ -162,8 +162,8 @@ func (c *Reporter) UpdateMetrics(ctx context.Context, data []*models.Metric) err
 		return fmt.Errorf("internal/agent/clients/reporter: send request err: %w", err)
 	}
 	defer func() {
-		if closeErr := resp.Body.Close(); closeErr != nil {
-			c.lg.ErrorCtx(ctx, "failed to close response body", zap.Error(closeErr))
+		if err := resp.Body.Close(); err != nil {
+			c.lg.ErrorCtx(ctx, "failed to close response body", zap.Error(err))
 		}
 	}()
 
@@ -227,7 +227,11 @@ func (c *Reporter) requestDo(ctx context.Context, req *http.Request) (*http.Resp
 			errChan <- fmt.Errorf("internal/agent/clients/reporter send request error %w", reqErr)
 			return
 		}
-		defer resp.Body.Close()
+		defer func() {
+			if err := resp.Body.Close(); err != nil {
+				c.lg.ErrorCtx(ctx, "failed to close response body", zap.Error(err))
+			}
+		}()
 
 		c.lg.DebugCtx(ctx,
 			"request",

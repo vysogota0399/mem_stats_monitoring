@@ -87,7 +87,9 @@ func TestNewUpdateMetricHandler(t *testing.T) {
 			router.ServeHTTP(w, r)
 			response := w.Result()
 			assert.Equal(t, tt.want.statusCode, response.StatusCode, "%s %s \n%v", tt.method, tt.url, tt.headers)
-			response.Body.Close()
+			if err := response.Body.Close(); err != nil {
+				t.Errorf("failed to close response body: %v", err)
+			}
 		})
 	}
 }

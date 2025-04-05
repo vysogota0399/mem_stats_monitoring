@@ -270,7 +270,9 @@ func (s *Subscriber) appendMetrics(messages ...*Message) error {
 			return fmt.Errorf("pubsub: add new line failed error %w", err)
 		}
 
-		s.dw.w.Flush()
+		if err := s.dw.w.Flush(); err != nil {
+			return fmt.Errorf("pubsub: flush failed error %w", err)
+		}
 	}
 
 	return nil

@@ -181,7 +181,11 @@ func TestServer_signer(t *testing.T) {
 			client := &http.Client{}
 			resp, err := client.Do(req)
 			assert.NoError(t, err)
-			defer resp.Body.Close()
+			defer func() {
+				if err = resp.Body.Close(); err != nil {
+					t.Errorf("failed to close response body: %v", err)
+				}
+			}()
 
 			assert.NoError(t, err)
 			assert.Equal(t, tt.wantStatusCode, resp.StatusCode)
@@ -236,7 +240,11 @@ func Test_headers(t *testing.T) {
 			client := &http.Client{}
 			resp, err := client.Do(req)
 			assert.NoError(t, err)
-			defer resp.Body.Close()
+			defer func() {
+				if err := resp.Body.Close(); err != nil {
+					t.Errorf("failed to close response body: %v", err)
+				}
+			}()
 
 			if tt.headerPresence {
 				assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
