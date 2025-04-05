@@ -14,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"time"
 
 	"github.com/gin-contrib/gzip"
@@ -105,6 +106,7 @@ func (s *Server) Start(wg *errgroup.Group) {
 
 	wg.Go(func() error {
 		if err := s.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			os.Exit(-1)
 			return fmt.Errorf("server: startup server failed error %w", err)
 		}
 
