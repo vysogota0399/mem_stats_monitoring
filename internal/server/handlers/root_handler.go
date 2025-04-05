@@ -7,24 +7,27 @@ import (
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/repositories"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
 )
 
 type RootHandler struct {
 	storage storage.Storage
+	lg      *logging.ZapLogger
 }
 
-func NewRootHandler(strg storage.Storage) gin.HandlerFunc {
+func NewRootHandler(strg storage.Storage, lg *logging.ZapLogger) gin.HandlerFunc {
 	return RootHandlerFunc(
 		&RootHandler{
 			storage: strg,
+			lg:      lg,
 		},
 	)
 }
 
 func RootHandlerFunc(h *RootHandler) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		counterRep := repositories.NewCounter(h.storage)
-		gaugeRep := repositories.NewGauge(h.storage)
+		counterRep := repositories.NewCounter(h.storage, h.lg)
+		gaugeRep := repositories.NewGauge(h.storage, h.lg)
 		counterRecords := make([]models.Counter, 0)
 		gaugeRecords := make([]models.Gauge, 0)
 

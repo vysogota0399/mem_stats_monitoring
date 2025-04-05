@@ -91,14 +91,14 @@ func (s *Server) Start(wg *errgroup.Group) {
 	pprof.Register(s.router)
 	if s.htmlRoute {
 		s.router.LoadHTMLGlob("internal/server/templates/*.tmpl")
-		s.router.GET("/", handlers.NewRootHandler(s.storage))
+		s.router.GET("/", handlers.NewRootHandler(s.storage, s.lg))
 	}
 
-	s.router.POST("/update/:type/:name/:value", handlers.NewUpdateMetricHandler(s.storage))
+	s.router.POST("/update/:type/:name/:value", handlers.NewUpdateMetricHandler(s.storage, s.lg))
 	s.router.POST("/update/", handlers.NewRestUpdateMetricHandler(s.storage, s.service.UpdateMetricService, s.lg))
 	s.router.POST("/updates/", handlers.NewUpdatesRestMetricsHandler(s.storage, s.service.UpdateMetricsService, s.lg))
 	s.router.POST("/value/", handlers.NewShowRestMetricHandler(s.storage, s.lg))
-	s.router.GET("/value/:type/:name", handlers.NewShowMetricHandler(s.storage))
+	s.router.GET("/value/:type/:name", handlers.NewShowMetricHandler(s.storage, s.lg))
 	s.router.GET("/ping", handlers.NewPingHandler(s.storage, s.lg))
 
 	s.lg.DebugCtx(s.ctx, "start", zap.String("config", s.config.String()))
@@ -218,31 +218,31 @@ func (s *Server) signer() gin.HandlerFunc {
 			return
 		}
 
-		sign, err := base64.StdEncoding.DecodeString(base64sign)
-		if err != nil {
-			s.lg.ErrorCtx(c, "base64 decode sign error", zap.Error(err))
+		sign, decodeErr := base64.StdEncoding.DecodeString(base64sign)
+		if decodeErr != nil {
+			s.lg.ErrorCtx(c, "base64 decode sign error", zap.Error(decodeErr))
 			c.AbortWithStatus(http.StatusBadRequest)
 			return
 		}
 
 		bodyBuff := &bytes.Buffer{}
-		if _, err := io.Copy(bodyBuff, c.Request.Body); err != nil {
-			s.lg.ErrorCtx(c, "read body error", zap.Error(err))
+		if _, copyErr := io.Copy(bodyBuff, c.Request.Body); copyErr != nil {
+			s.lg.ErrorCtx(c, "read body error", zap.Error(copyErr))
 			c.AbortWithStatus(http.StatusInternalServerError)
 			return
 		}
 
 		c.Request.Body = io.NopCloser(bodyBuff)
 
-		if eq, err := cms.Verify(bodyBuff, sign); err != nil || !eq {
-			s.lg.ErrorCtx(c, "invalid request signature", zap.Error(err))
+		if eq, verifyErr := cms.Verify(bodyBuff, sign); verifyErr != nil || !eq {
+			s.lg.ErrorCtx(c, "invalid request signature", zap.Error(verifyErr))
 			c.AbortWithStatus(http.StatusBadRequest)
 			return
 		}
 
 		c.Next()
 
-		sign, err = cms.Sign(rw)
+		sign, err := cms.Sign(rw)
 		if err != nil {
 			s.lg.ErrorCtx(c, "response sign failed", zap.Error(err))
 			c.AbortWithStatus(http.StatusInternalServerError)

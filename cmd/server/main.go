@@ -48,7 +48,7 @@ func run() {
 		ctx,
 		cfg,
 		strg,
-		service.New(strg),
+		service.New(strg, lg),
 		lg,
 	)
 

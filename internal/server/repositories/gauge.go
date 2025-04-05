@@ -8,18 +8,22 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
+	"go.uber.org/zap"
 )
 
 // Gauge отвечает за связь уровня бизнес логики и persistence layer в контексте работы с Gauge.
 type Gauge struct {
 	storage storage.Storage
 	Records []models.Gauge
+	lg      *logging.ZapLogger
 }
 
-func NewGauge(strg storage.Storage) *Gauge {
+func NewGauge(strg storage.Storage, lg *logging.ZapLogger) *Gauge {
 	return &Gauge{
 		storage: strg,
 		Records: make([]models.Gauge, 0),
+		lg:      lg,
 	}
 }
 
@@ -137,7 +141,13 @@ func (g *Gauge) saveCollToDB(ctx context.Context, s storage.DBAble, coll []model
 		return nil, err
 	}
 
-	defer tx.Commit()
+	defer func() {
+		if commitErr := tx.Commit(); commitErr != nil {
+			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				g.lg.ErrorCtx(ctx, "failed to rollback transaction after commit error", zap.Error(rollbackErr))
+			}
+		}
+	}()
 
 	for _, rec := range coll {
 		res := tx.QueryRowContext(
@@ -151,7 +161,9 @@ func (g *Gauge) saveCollToDB(ctx context.Context, s storage.DBAble, coll []model
 			rec.Value,
 		)
 		if err := res.Scan(&rec.ID); err != nil {
-			tx.Rollback()
+			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				g.lg.ErrorCtx(ctx, "failed to rollback transaction after scan error", zap.Error(rollbackErr))
+			}
 			return nil, err
 		}
 	}

@@ -113,10 +113,18 @@ func Test_updateRestMetricHandlerFunc(t *testing.T) {
 
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, r)
-			defer r.Body.Close()
+			defer func() {
+				if err = r.Body.Close(); err != nil {
+					t.Errorf("failed to close request body: %v", err)
+				}
+			}()
 
 			result := w.Result()
-			defer result.Body.Close()
+			defer func() {
+				if err = result.Body.Close(); err != nil {
+					t.Errorf("failed to close response body: %v", err)
+				}
+			}()
 
 			assert.Equal(t, tt.want.status, result.StatusCode)
 			assert.JSONEq(t, string(tt.want.payload), w.Body.String())
