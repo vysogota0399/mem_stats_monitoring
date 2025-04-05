@@ -16,7 +16,7 @@ cmd/agent/main
 cmd/agent/agent
 cmd/server/main
 cmd/server/server
-cmd/multicheker/mycheck
+cmd/staticclient/mycheck
 data/records.txt
 
 # Dependency directories (remove the comment below to include it)
