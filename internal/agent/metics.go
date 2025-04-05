@@ -16,7 +16,7 @@ import (
 type MemValueGenerator func(*runtime.MemStats) any
 
 type Reportable interface {
-	fromStore(s storage.Storage) (*models.Metric, error)
+	fromStore(s storage.Storage, target *models.Metric) error
 }
 
 type RuntimeMetric struct {
@@ -25,18 +25,10 @@ type RuntimeMetric struct {
 	generateValue MemValueGenerator
 }
 
-func (m RuntimeMetric) fromStore(s storage.Storage) (*models.Metric, error) {
-	return s.Get(m.Type, m.Name)
-}
-
-type CustomMetric struct {
-	Name          string
-	Type          string
-	generateValue func(*CustomMetric, *Agent) (uint64, error)
-}
-
-func (c CustomMetric) fromStore(s storage.Storage) (*models.Metric, error) {
-	return s.Get(c.Type, c.Name)
+func (m RuntimeMetric) fromStore(s storage.Storage, target *models.Metric) error {
+	target.Type = m.Type
+	target.Name = m.Name
+	return s.Get(target)
 }
 
 var runtimeMetricsDefinition = []RuntimeMetric{
@@ -158,21 +150,34 @@ var runtimeMetricsDefinition = []RuntimeMetric{
 	},
 }
 
+type CustomMetric struct {
+	Name          string
+	Type          string
+	generateValue func(*CustomMetric, *Agent) (uint64, error)
+}
+
+func (c CustomMetric) fromStore(s storage.Storage, target *models.Metric) error {
+	target.Type = c.Type
+	target.Name = c.Name
+	return s.Get(target)
+}
+
 var customMetricsDefinition = []CustomMetric{
 	{
 		Name: "PollCount",
 		Type: "counter",
 		generateValue: func(m *CustomMetric, a *Agent) (uint64, error) {
 			var val uint64
-			last, err := a.storage.Get(m.Type, m.Name)
-			if err != nil && !errors.Is(err, storage.ErrNoRecords) {
+
+			to := a.metricsPool.Get()
+			if err := a.storage.Get(to); err != nil && !errors.Is(err, storage.ErrNoRecords) {
 				return val, err
 			}
 
-			if last == nil {
+			if to.Name == "" && to.Type == "" {
 				val = 0
 			} else {
-				val, err = strconv.ParseUint(last.Value, 10, 64)
+				val, err := strconv.ParseUint(to.Value, 10, 64)
 				if err != nil {
 					return val, err
 				}
@@ -202,8 +207,10 @@ type VirtualMemoryMetric struct {
 	generateValue func(*mem.VirtualMemoryStat) uint64
 }
 
-func (c VirtualMemoryMetric) fromStore(s storage.Storage) (*models.Metric, error) {
-	return s.Get(c.Type, c.Name)
+func (c VirtualMemoryMetric) fromStore(s storage.Storage, target *models.Metric) error {
+	target.Type = c.Type
+	target.Name = c.Name
+	return s.Get(target)
 }
 
 var virtualMemoryMetricsDefinition = []VirtualMemoryMetric{
@@ -223,8 +230,10 @@ type CPUMetric struct {
 	generateValue func([]cpu.InfoStat) int32
 }
 
-func (c CPUMetric) fromStore(s storage.Storage) (*models.Metric, error) {
-	return s.Get(c.Type, c.Name)
+func (c CPUMetric) fromStore(s storage.Storage, target *models.Metric) error {
+	target.Type = c.Type
+	target.Name = c.Name
+	return s.Get(target)
 }
 
 var cpuMetricsDefinition = []CPUMetric{
