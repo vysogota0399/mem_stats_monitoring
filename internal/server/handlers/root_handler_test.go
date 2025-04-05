@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
 )
 
 func TestNewRootHandler(t *testing.T) {
@@ -29,9 +30,11 @@ func TestNewRootHandler(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			lg, err := logging.MustZapLogger(-1)
+			assert.NoError(t, err)
 			router := gin.Default()
 			router.LoadHTMLGlob("../templates/*.tmpl")
-			handler := NewRootHandler(tt.args.storage)
+			handler := NewRootHandler(tt.args.storage, lg)
 			router.GET("/", handler)
 
 			r, err := http.NewRequestWithContext(context.TODO(), "GET", "/", nil)

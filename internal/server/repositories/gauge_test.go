@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
 )
 
 func TestGauge_Last(t *testing.T) {
@@ -39,7 +40,9 @@ func TestGauge_Last(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			g := NewGauge(tt.args.storage)
+			lg, err := logging.MustZapLogger(-1)
+			assert.NoError(t, err)
+			g := NewGauge(tt.args.storage, lg)
 			got, err := g.Last(context.Background(), tt.args.mName)
 
 			assert.Equal(t, tt.want, got)
@@ -75,8 +78,11 @@ func TestGauge_All(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			lg, err := logging.MustZapLogger(-1)
+			assert.NoError(t, err)
 			g := Gauge{
 				storage: tt.fields.storage,
+				lg:      lg,
 			}
 			got := g.All()
 			assert.Equal(t, tt.want, got)
@@ -104,10 +110,13 @@ func TestGauge_SaveCollection(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			lg, err := logging.MustZapLogger(-1)
+			assert.NoError(t, err)
 			g := &Gauge{
 				storage: tt.fields.storage,
+				lg:      lg,
 			}
-			_, err := g.SaveCollection(context.Background(), tt.fields.collection)
+			_, err = g.SaveCollection(context.Background(), tt.fields.collection)
 			assert.Equal(t, tt.wantErr, err != nil)
 		})
 	}
@@ -133,10 +142,13 @@ func TestGauge_Create(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			lg, err := logging.MustZapLogger(-1)
+			assert.NoError(t, err)
 			g := &Gauge{
 				storage: tt.fields.storage,
+				lg:      lg,
 			}
-			_, err := g.Create(context.Background(), &tt.fields.record)
+			_, err = g.Create(context.Background(), &tt.fields.record)
 			assert.Equal(t, tt.wantErr, err != nil)
 		})
 	}

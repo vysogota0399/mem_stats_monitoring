@@ -27,9 +27,9 @@ func TestNewServer(t *testing.T) {
 	ctx := context.Background()
 	cfg := config.Config{}
 	strg := storage.NewMemory()
-	srvc := service.New(strg)
 	lg, err := logging.MustZapLogger(zapcore.Level(cfg.LogLevel))
 	assert.NoError(t, err)
+	srvc := service.New(strg, lg)
 
 	srv := NewServer(ctx, cfg, strg, srvc, lg, withTestServer)
 	assert.Equal(t, cfg, srv.config)
@@ -44,9 +44,10 @@ func TestServer_Start(t *testing.T) {
 
 	cfg := config.Config{Address: "localhost:8080"}
 	strg := storage.NewMemory()
-	srvc := service.New(strg)
 	lg, err := logging.MustZapLogger(zapcore.Level(cfg.LogLevel))
 	assert.NoError(t, err)
+
+	srvc := service.New(strg, lg)
 
 	errg, ctx := errgroup.WithContext(ctx)
 	srv := NewServer(ctx, cfg, strg, srvc, lg, withTestServer)
@@ -153,9 +154,9 @@ func TestServer_signer(t *testing.T) {
 			defer cancel()
 
 			strg := storage.NewMemory()
-			srvc := service.New(strg)
 			lg, err := logging.MustZapLogger(zapcore.Level(tt.fields.cfg.LogLevel))
 			assert.NoError(t, err)
+			srvc := service.New(strg, lg)
 			errg, ctx := errgroup.WithContext(ctx)
 
 			srv := NewServer(ctx, tt.fields.cfg, strg, srvc, lg, withTestServer)
@@ -211,9 +212,9 @@ func Test_headers(t *testing.T) {
 			defer cancel()
 
 			strg := storage.NewMemory()
-			srvc := service.New(strg)
 			lg, err := logging.MustZapLogger(zapcore.Level(zap.DebugLevel))
 			assert.NoError(t, err)
+			srvc := service.New(strg, lg)
 			errg, ctx := errgroup.WithContext(ctx)
 
 			cfg := config.Config{Address: ":1234"}

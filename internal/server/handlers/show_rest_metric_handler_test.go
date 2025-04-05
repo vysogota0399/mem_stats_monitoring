@@ -24,12 +24,14 @@ func Test_showRestMetricHandlerFunc(t *testing.T) {
 	const unexpectedMName = "notfound"
 	const expectedMValue = 1.0
 	s := storage.NewMemory()
+	lg, err := logging.MustZapLogger(-1)
+	assert.NoError(t, err)
 	record := models.Gauge{
 		Name:  expectedMName,
 		Value: expectedMValue,
 	}
-	rep := repositories.NewGauge(s)
-	_, err := rep.Create(context.Background(), &record)
+	rep := repositories.NewGauge(s, lg)
+	_, err = rep.Create(context.Background(), &record)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -52,8 +54,8 @@ func Test_showRestMetricHandlerFunc(t *testing.T) {
 		{
 			name: "when valid payload and service returns no errors",
 			args: args{
-				gaugeRepository:   repositories.NewGauge(s),
-				counterRepository: repositories.NewCounter(s),
+				gaugeRepository:   repositories.NewGauge(s, lg),
+				counterRepository: repositories.NewCounter(s, lg),
 				payload:           []byte(fmt.Sprintf(`{"id": "%s", "type": "%s"}`, expectedMName, expectedMType)),
 			},
 			want: want{
@@ -65,8 +67,8 @@ func Test_showRestMetricHandlerFunc(t *testing.T) {
 		{
 			name: "when invalid payload",
 			args: args{
-				gaugeRepository:   repositories.NewGauge(s),
-				counterRepository: repositories.NewCounter(s),
+				gaugeRepository:   repositories.NewGauge(s, lg),
+				counterRepository: repositories.NewCounter(s, lg),
 				payload:           []byte(`{}`),
 			},
 			want: want{
@@ -78,8 +80,8 @@ func Test_showRestMetricHandlerFunc(t *testing.T) {
 		{
 			name: "when valid payload and record not found",
 			args: args{
-				gaugeRepository:   repositories.NewGauge(s),
-				counterRepository: repositories.NewCounter(s),
+				gaugeRepository:   repositories.NewGauge(s, lg),
+				counterRepository: repositories.NewCounter(s, lg),
 				payload:           []byte(fmt.Sprintf(`{"id": "%s", "type": "%s"}`, unexpectedMName, expectedMType)),
 			},
 			want: want{

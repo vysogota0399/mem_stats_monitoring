@@ -11,20 +11,23 @@ import (
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/repositories"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
 )
 
-type metricsUpdater func(ctx context.Context, m Metric, storage storage.Storage) error
+type metricsUpdater func(ctx context.Context, m Metric, storage storage.Storage, lg *logging.ZapLogger) error
 
 type UpdateMetricHandler struct {
 	storage        storage.Storage
 	metricsUpdater metricsUpdater
+	lg             *logging.ZapLogger
 }
 
-func NewUpdateMetricHandler(strg storage.Storage) gin.HandlerFunc {
+func NewUpdateMetricHandler(strg storage.Storage, lg *logging.ZapLogger) gin.HandlerFunc {
 	return updateMetricHandlerFunc(
 		&UpdateMetricHandler{
 			storage:        strg,
 			metricsUpdater: updateMetrics,
+			lg:             lg,
 		},
 	)
 }
@@ -52,24 +55,24 @@ func updateMetricHandlerFunc(h *UpdateMetricHandler) gin.HandlerFunc {
 			Value: c.Param("value"),
 		}
 
-		if err := h.metricsUpdater(c, metric, h.storage); err != nil {
+		if err := h.metricsUpdater(c, metric, h.storage, h.lg); err != nil {
 			c.AbortWithStatus(http.StatusBadRequest)
 		}
 	}
 }
 
-func updateMetrics(ctx context.Context, m Metric, strg storage.Storage) error {
+func updateMetrics(ctx context.Context, m Metric, strg storage.Storage, lg *logging.ZapLogger) error {
 	if m.Type != models.GaugeType && m.Type != models.CounterType {
 		return fmt.Errorf("update_metric_service: underfined metric type: %s", m.Type)
 	}
 
 	if m.Type == "gauge" {
-		err := processGauge(ctx, &m, strg)
+		err := processGauge(ctx, &m, strg, lg)
 		if err != nil {
 			return err
 		}
 	} else {
-		err := processCounter(ctx, &m, strg)
+		err := processCounter(ctx, &m, strg, lg)
 		if err != nil {
 			return err
 		}
@@ -78,13 +81,13 @@ func updateMetrics(ctx context.Context, m Metric, strg storage.Storage) error {
 	return nil
 }
 
-func processGauge(ctx context.Context, m *Metric, strg storage.Storage) error {
+func processGauge(ctx context.Context, m *Metric, strg storage.Storage, lg *logging.ZapLogger) error {
 	g, err := newGauge(m)
 	if err != nil {
 		return err
 	}
 
-	rep := repositories.NewGauge(strg)
+	rep := repositories.NewGauge(strg, lg)
 	if _, err := rep.Create(ctx, &g); err != nil {
 		return err
 	}
@@ -92,13 +95,13 @@ func processGauge(ctx context.Context, m *Metric, strg storage.Storage) error {
 	return nil
 }
 
-func processCounter(ctx context.Context, m *Metric, strg storage.Storage) error {
+func processCounter(ctx context.Context, m *Metric, strg storage.Storage, lg *logging.ZapLogger) error {
 	c, err := newCounter(m)
 	if err != nil {
 		return err
 	}
 
-	rep := repositories.NewCounter(strg)
+	rep := repositories.NewCounter(strg, lg)
 	if _, err := rep.Create(ctx, &c); err != nil {
 		return err
 	}

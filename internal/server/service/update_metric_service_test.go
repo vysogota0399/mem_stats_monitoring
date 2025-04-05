@@ -8,6 +8,7 @@ import (
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/repositories"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
 )
 
 func TestUpdateMetricService_Call(t *testing.T) {
@@ -80,9 +81,10 @@ func TestUpdateMetricService_Call(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := storage.NewMemory()
-
-			counterRep := repositories.NewCounter(s)
-			gaugeRep := repositories.NewGauge(s)
+			lg, err := logging.MustZapLogger(-1)
+			assert.NoError(t, err)
+			counterRep := repositories.NewCounter(s, lg)
+			gaugeRep := repositories.NewGauge(s, lg)
 			serv := UpdateMetricService{
 				counterRep: counterRep,
 				gaugeRep:   gaugeRep,

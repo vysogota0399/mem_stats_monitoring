@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
 )
 
 func TestNewShowMetricHandler(t *testing.T) {
@@ -67,7 +68,9 @@ func TestNewShowMetricHandler(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			router := gin.Default()
-			handler := NewShowMetricHandler(tt.args.storage)
+			lg, err := logging.MustZapLogger(-1)
+			assert.NoError(t, err)
+			handler := NewShowMetricHandler(tt.args.storage, lg)
 			router.GET("/value/:type/:name", handler)
 
 			r, err := http.NewRequestWithContext(context.TODO(), "GET", fmt.Sprintf("/value/%s/%s", tt.args.mType, tt.args.mName), nil)

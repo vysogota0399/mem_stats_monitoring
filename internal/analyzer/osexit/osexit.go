@@ -29,8 +29,8 @@ func run(pass *analysis.Pass) (interface{}, error) {
 	insp, ok := result.(*inspector.Inspector)
 	if !ok {
 		// If type assertion fails, create a new inspector
-		insp := inspector.New(pass.Files)
-		runAnalysis(pass, insp)
+		newInsp := inspector.New(pass.Files)
+		runAnalysis(pass, newInsp)
 		return nil, nil
 	}
 

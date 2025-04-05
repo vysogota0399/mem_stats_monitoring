@@ -77,7 +77,9 @@ func NewDBStorage(ctx context.Context, cfg config.Config, errg *errgroup.Group, 
 	}
 
 	if err := strg.migrate(); err != nil {
-		strg.db.Close()
+		if closeErr := strg.db.Close(); closeErr != nil {
+			lg.ErrorCtx(ctx, "failed to close db after migration error", zap.Error(closeErr))
+		}
 		return nil, err
 	}
 
@@ -103,7 +105,9 @@ func (s *DBStorage) openDB(atpt uint8) error {
 	}
 
 	if err := db.Ping(); err != nil {
-		db.Close()
+		if closeErr := db.Close(); closeErr != nil {
+			s.lg.ErrorCtx(context.Background(), "failed to close db after ping error", zap.Error(closeErr))
+		}
 		var pgErr *pgconn.PgError
 
 		if errors.As(err, &pgErr) && pgerrcode.IsConnectionException(pgErr.Code) && atpt <= s.maxOpenRetries {

@@ -115,7 +115,11 @@ func (c *Reporter) UpdateMetric(ctx context.Context, mType, mName, value string)
 	if err != nil {
 		return fmt.Errorf("internal/agent/clients/reporter: send request err: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			c.lg.ErrorCtx(ctx, "failed to close response body", zap.Error(closeErr))
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return ErrUnsuccessfulResponse
@@ -157,7 +161,11 @@ func (c *Reporter) UpdateMetrics(ctx context.Context, data []*models.Metric) err
 	if err != nil {
 		return fmt.Errorf("internal/agent/clients/reporter: send request err: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			c.lg.ErrorCtx(ctx, "failed to close response body", zap.Error(closeErr))
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return ErrUnsuccessfulResponse
@@ -195,28 +203,28 @@ func (c *Reporter) requestDo(ctx context.Context, req *http.Request) (*http.Resp
 		defer c.semaphore.Release()
 
 		start := time.Now()
-		reader, err := req.GetBody()
-		if err != nil {
-			errChan <- fmt.Errorf("internal/agent/clients/reporter get body reader error %w", err)
+		reader, readerErr := req.GetBody()
+		if readerErr != nil {
+			errChan <- fmt.Errorf("internal/agent/clients/reporter get body reader error %w", readerErr)
 			return
 		}
 
 		buff := bytes.Buffer{}
-		if _, err := io.Copy(&buff, reader); err != nil {
-			errChan <- fmt.Errorf("internal/agent/clients/reporter read body error %w", err)
+		if _, copyErr := io.Copy(&buff, reader); copyErr != nil {
+			errChan <- fmt.Errorf("internal/agent/clients/reporter read body error %w", copyErr)
 			return
 		}
 
 		ctx = context.WithValue(ctx, bKey, buff.Bytes())
 
-		if err := c.signRequest(ctx, req); err != nil {
-			errChan <- fmt.Errorf("internal/agent/clients/reporter sign request error %w", err)
+		if signErr := c.signRequest(ctx, req); signErr != nil {
+			errChan <- fmt.Errorf("internal/agent/clients/reporter sign request error %w", signErr)
 			return
 		}
 
-		resp, err := c.client.Request(req)
-		if err != nil {
-			errChan <- fmt.Errorf("internal/agent/clients/reporter send request error %w", err)
+		resp, reqErr := c.client.Request(req)
+		if reqErr != nil {
+			errChan <- fmt.Errorf("internal/agent/clients/reporter send request error %w", reqErr)
 			return
 		}
 		defer resp.Body.Close()
