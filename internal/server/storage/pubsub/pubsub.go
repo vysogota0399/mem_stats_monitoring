@@ -148,20 +148,24 @@ func (s *Subscriber) startScheduller(ctx context.Context, errg *errgroup.Group) 
 	}
 
 	errg.Go(func() error {
-		defer s.dw.Close()
+		defer func() {
+			if closeErr := s.dw.Close(); closeErr != nil {
+				s.lg.ErrorCtx(ctx, "failed to close data writer", zap.Error(closeErr))
+			}
+		}()
 		for {
 			select {
 			case <-ctx.Done():
-				ctx := s.lg.WithContextFields(ctx, zap.String("uuid", uuid.NewV4().String()))
-				s.lg.DebugCtx(ctx, "graceful shutdown", zap.String("stage", "start"))
-				s.unqueue(ctx)
-				s.lg.DebugCtx(ctx, "graceful shutdown", zap.String("stage", "finished"))
+				shutdownCtx := s.lg.WithContextFields(ctx, zap.String("uuid", uuid.NewV4().String()))
+				s.lg.DebugCtx(shutdownCtx, "graceful shutdown", zap.String("stage", "start"))
+				s.unqueue(shutdownCtx)
+				s.lg.DebugCtx(shutdownCtx, "graceful shutdown", zap.String("stage", "finished"))
 				return nil
 			case <-time.After(s.storeInterval):
-				ctx := s.lg.WithContextFields(ctx, zap.String("uuid", uuid.NewV4().String()))
-				s.lg.DebugCtx(ctx, "scheduler", zap.String("stage", "start"))
-				s.unqueue(ctx)
-				s.lg.DebugCtx(ctx, "scheduler", zap.String("stage", "finised"))
+				schedulerCtx := s.lg.WithContextFields(ctx, zap.String("uuid", uuid.NewV4().String()))
+				s.lg.DebugCtx(schedulerCtx, "scheduler", zap.String("stage", "start"))
+				s.unqueue(schedulerCtx)
+				s.lg.DebugCtx(schedulerCtx, "scheduler", zap.String("stage", "finised"))
 			}
 		}
 	})
@@ -179,7 +183,9 @@ func (s *Subscriber) startConsumer(ctx context.Context, errg *errgroup.Group) {
 			case m := <-s.ch:
 				if s.isSync() {
 					s.lg.DebugCtx(ctx, "consumed message, do sync append", zap.Any("message", m))
-					s.appendMetrics(m)
+					if err := s.appendMetrics(m); err != nil {
+						s.lg.ErrorCtx(ctx, "failed to append metrics", zap.Error(err))
+					}
 				} else {
 					s.lg.DebugCtx(ctx, "consumed message, do publish to queue", zap.Any("message", m))
 					s.q.push(m)
@@ -207,7 +213,9 @@ func (s *Subscriber) unqueue(ctx context.Context) {
 		}
 	}
 
-	s.appendMetrics(metrics...)
+	if err := s.appendMetrics(metrics...); err != nil {
+		s.lg.ErrorCtx(ctx, "failed to append metrics from queue", zap.Error(err))
+	}
 	s.lg.DebugCtx(ctx, "queue is empty")
 }
 
@@ -262,7 +270,9 @@ func (s *Subscriber) appendMetrics(messages ...*Message) error {
 			return fmt.Errorf("pubsub: add new line failed error %w", err)
 		}
 
-		s.dw.w.Flush()
+		if err := s.dw.w.Flush(); err != nil {
+			return fmt.Errorf("pubsub: flush failed error %w", err)
+		}
 	}
 
 	return nil

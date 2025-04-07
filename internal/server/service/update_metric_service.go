@@ -32,13 +32,14 @@ type UpdateMetricServiceResult struct {
 
 // Call принимает параметры и отвечает за выполнение логики сервиса UpdateMetricService.
 func (s UpdateMetricService) Call(ctx context.Context, params UpdateMetricServiceParams) (UpdateMetricServiceResult, error) {
-	if params.MType == models.CounterType {
+	switch params.MType {
+	case models.CounterType:
 		return s.createCounter(ctx, params)
-	} else if params.MType == models.GaugeType {
+	case models.GaugeType:
 		return s.createGauge(ctx, params)
+	default:
+		return UpdateMetricServiceResult{}, fmt.Errorf("internal/server/service/update_metric_service.go: unexpected type(%s)", params.MType)
 	}
-
-	return UpdateMetricServiceResult{}, fmt.Errorf("internal/server/service/update_metric_service.go: unexpected type(%s)", params.MType)
 }
 
 func (s UpdateMetricService) createCounter(ctx context.Context, params UpdateMetricServiceParams) (UpdateMetricServiceResult, error) {

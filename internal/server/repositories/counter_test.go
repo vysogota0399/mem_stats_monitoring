@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
 )
 
 func TestCreate(t *testing.T) {
@@ -37,7 +38,9 @@ func TestCreate(t *testing.T) {
 
 	for _, tt := range tasks {
 		t.Run(tt.name, func(t *testing.T) {
-			subject := NewCounter(tt.storage)
+			lg, err := logging.MustZapLogger(-1)
+			assert.NoError(t, err)
+			subject := NewCounter(tt.storage, lg)
 			record, err := subject.Create(context.Background(), &tt.record)
 			assert.NoError(t, err)
 			assert.NotNil(t, record)
@@ -75,7 +78,9 @@ func TestLast(t *testing.T) {
 
 	for _, tt := range tasks {
 		t.Run(tt.name, func(t *testing.T) {
-			subject := NewCounter(tt.storage)
+			lg, err := logging.MustZapLogger(-1)
+			assert.NoError(t, err)
+			subject := NewCounter(tt.storage, lg)
 			record, err := subject.Last(context.Background(), tt.searchName)
 			assert.Equal(t, record, tt.wantsRecord)
 			assert.Equal(t, err, tt.wantsError)
@@ -121,7 +126,9 @@ func TestCounter_All(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := NewCounter(tt.fields.storage)
+			lg, err := logging.MustZapLogger(-1)
+			assert.NoError(t, err)
+			c := NewCounter(tt.fields.storage, lg)
 			actual := c.All()
 			assert.Equal(t, tt.want, actual)
 		})
@@ -148,10 +155,13 @@ func TestCounter_SaveCollection(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			lg, err := logging.MustZapLogger(-1)
+			assert.NoError(t, err)
 			g := &Counter{
 				storage: tt.fields.storage,
+				lg:      lg,
 			}
-			_, err := g.SaveCollection(context.Background(), tt.fields.collection)
+			_, err = g.SaveCollection(context.Background(), tt.fields.collection)
 			assert.Equal(t, tt.wantErr, err != nil)
 		})
 	}
@@ -177,10 +187,13 @@ func TestCounter_Create(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			lg, err := logging.MustZapLogger(-1)
+			assert.NoError(t, err)
 			g := &Counter{
 				storage: tt.fields.storage,
+				lg:      lg,
 			}
-			_, err := g.Create(context.Background(), &tt.fields.record)
+			_, err = g.Create(context.Background(), &tt.fields.record)
 			assert.Equal(t, tt.wantErr, err != nil)
 		})
 	}
@@ -228,8 +241,11 @@ func TestCounter_SearchByName(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			lg, err := logging.MustZapLogger(-1)
+			assert.NoError(t, err)
 			c := &Counter{
 				storage: tt.fields.storage,
+				lg:      lg,
 			}
 			got, err := c.SearchByName(context.Background(), tt.args.names)
 			assert.NoError(t, err)

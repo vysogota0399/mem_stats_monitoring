@@ -132,6 +132,8 @@ func BenchmarkUpdateMetricsService_Call(b *testing.B) {
 		counterRep.EXPECT().SaveCollection(ctx, gomock.Any()).Return([]models.Counter{}, nil)
 		gaugeRep.EXPECT().SaveCollection(ctx, gomock.Any()).Return([]models.Gauge{}, nil)
 
-		s.Call(ctx, UpdateMetricsServiceParams(input))
+		if _, err := s.Call(ctx, UpdateMetricsServiceParams(input)); err != nil {
+			b.Fatal(err)
+		}
 	}
 }

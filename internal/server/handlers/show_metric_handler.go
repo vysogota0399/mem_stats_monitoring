@@ -9,6 +9,7 @@ import (
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/repositories"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
 )
 
 const gauge string = "gauge"
@@ -17,13 +18,15 @@ const counter string = "counter"
 type ShowMetricHandler struct {
 	gaugeRepository   *repositories.Gauge
 	counterRepository *repositories.Counter
+	lg                *logging.ZapLogger
 }
 
-func NewShowMetricHandler(strg storage.Storage) gin.HandlerFunc {
+func NewShowMetricHandler(strg storage.Storage, lg *logging.ZapLogger) gin.HandlerFunc {
 	return showMetricHandlerFunc(
 		&ShowMetricHandler{
-			gaugeRepository:   repositories.NewGauge(strg),
-			counterRepository: repositories.NewCounter(strg),
+			gaugeRepository:   repositories.NewGauge(strg, lg),
+			counterRepository: repositories.NewCounter(strg, lg),
+			lg:                lg,
 		},
 	)
 }

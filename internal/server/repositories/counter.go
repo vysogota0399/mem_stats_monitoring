@@ -10,18 +10,22 @@ import (
 
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
+	"go.uber.org/zap"
 )
 
 // Counter отвечает за связь уровня бизнес логики и persistence layer в контексте работы с Counter.
 type Counter struct {
 	storage storage.Storage
 	Records []models.Counter
+	lg      *logging.ZapLogger
 }
 
-func NewCounter(strg storage.Storage) *Counter {
+func NewCounter(strg storage.Storage, lg *logging.ZapLogger) *Counter {
 	return &Counter{
 		storage: strg,
 		Records: make([]models.Counter, 0),
+		lg:      lg,
 	}
 }
 
@@ -168,7 +172,13 @@ func (c *Counter) saveCollToDB(ctx context.Context, s storage.DBAble, coll []mod
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Commit()
+	defer func() {
+		if commitErr := tx.Commit(); commitErr != nil {
+			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				c.lg.ErrorCtx(ctx, "failed to rollback transaction after commit error", zap.Error(rollbackErr))
+			}
+		}
+	}()
 
 	for _, rec := range coll {
 		if found, ok := records[rec.Name]; ok {
@@ -188,7 +198,9 @@ func (c *Counter) saveCollToDB(ctx context.Context, s storage.DBAble, coll []mod
 			rec.Value,
 		)
 		if err := res.Scan(&rec.ID); err != nil {
-			tx.Rollback()
+			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				c.lg.ErrorCtx(ctx, "failed to rollback transaction after scan error", zap.Error(rollbackErr))
+			}
 			return nil, fmt.Errorf("internal/server/repositories/counter.go: record scan failed error %w", err)
 		}
 	}
@@ -227,7 +239,11 @@ func (c *Counter) searchSumByNameInDB(ctx context.Context, s storage.DBAble, nam
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil {
+			c.lg.ErrorCtx(ctx, "failed to close rows", zap.Error(closeErr))
+		}
+	}()
 
 	records := make(map[string]models.Counter)
 	for rows.Next() {

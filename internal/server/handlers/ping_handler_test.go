@@ -73,7 +73,10 @@ func TestPingHandlerFunc(t *testing.T) {
 
 			router.ServeHTTP(w, r)
 			resp := w.Result()
-			defer resp.Body.Close()
+			defer func() {
+				err := resp.Body.Close()
+				assert.NoError(t, err)
+			}()
 
 			assert.Equal(t, tt.want, resp.StatusCode)
 		})

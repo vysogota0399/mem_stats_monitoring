@@ -25,8 +25,8 @@ type ShowRestMetricHandler struct {
 func NewShowRestMetricHandler(strg storage.Storage, lg *logging.ZapLogger) gin.HandlerFunc {
 	return showRestMetricHandlerFunc(
 		&ShowRestMetricHandler{
-			gaugeRepository:   repositories.NewGauge(strg),
-			counterRepository: repositories.NewCounter(strg),
+			gaugeRepository:   repositories.NewGauge(strg, lg),
+			counterRepository: repositories.NewCounter(strg, lg),
 			lg:                lg,
 		},
 	)
