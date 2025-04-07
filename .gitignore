@@ -29,3 +29,5 @@ vendor/
 
 /.docker/server/.env
 /.docker/agent/.env
+
+./multicheck.yml

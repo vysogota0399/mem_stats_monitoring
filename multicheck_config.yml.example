@@ -1,0 +1,20 @@
+analyzers:
+  - name: staticcheck
+    checks:
+      - QF1010
+      - QF1003
+      - ST1023
+      - ST1018
+      - ST1016
+      - ST1013
+      - ST1012
+      - ST1011
+      - ST1006
+      - ST1005
+      - S1036
+      - S1030
+      - S1028
+      - S1016
+      - S1010
+      - S1009
+      - S1001

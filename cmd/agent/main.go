@@ -2,13 +2,13 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/config"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/storage"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
+	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
@@ -17,12 +17,6 @@ var (
 	BuildDate    string = "N/A"
 	BuildCommit  string = "N/A"
 )
-
-func init() {
-	fmt.Printf("Build version: %s\n", BuildVersion)
-	fmt.Printf("Build date: %s\n", BuildDate)
-	fmt.Printf("Build commit: %s\n", BuildCommit)
-}
 
 func main() {
 	cfg, err := config.NewConfig()
@@ -35,10 +29,20 @@ func main() {
 		log.Fatal(err)
 	}
 
+	info(lg)
+
 	ctx := context.Background()
 	agent.NewAgent(
 		lg,
 		cfg,
 		storage.NewMemoryStorage(lg),
 	).Start(ctx)
+}
+
+func info(lg *logging.ZapLogger) {
+	lg.InfoCtx(context.Background(), "Build info",
+		zap.String("version", BuildVersion),
+		zap.String("date", BuildDate),
+		zap.String("commit", BuildCommit),
+	)
 }
