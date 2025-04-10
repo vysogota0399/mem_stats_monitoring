@@ -21,6 +21,14 @@ type Counter struct {
 	lg      *logging.ZapLogger
 }
 
+type DBAble interface {
+	storage.Storage
+	QueryRowContext(ctx context.Context, query string, args any, result storage.ResultFunc) error
+	BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error)
+	CommitTx(ctx context.Context, tx *sql.Tx) error
+	RollbackTx(ctx context.Context, tx *sql.Tx) error
+}
+
 func NewCounter(strg storage.Storage, lg *logging.ZapLogger) *Counter {
 	return &Counter{
 		storage: strg,
@@ -36,7 +44,7 @@ func (c *Counter) Create(ctx context.Context, record *models.Counter) (*models.C
 		return nil, err
 	}
 
-	if s, ok := c.storage.(storage.DBAble); ok {
+	if s, ok := c.storage.(DBAble); ok {
 		return c.pushToDB(ctx, s, record)
 	}
 
@@ -62,17 +70,19 @@ func (c *Counter) processRec(ctx context.Context, record *models.Counter) (*mode
 	return record, nil
 }
 
-func (c *Counter) pushToDB(ctx context.Context, s storage.DBAble, rec *models.Counter) (*models.Counter, error) {
-	if err := s.DB().QueryRowContext(
+func (c *Counter) pushToDB(ctx context.Context, s DBAble, rec *models.Counter) (*models.Counter, error) {
+	if err := s.QueryRowContext(
 		ctx,
 		`
-			insert into counters(name, value)
-			values ($1, $2)
-			returning id
+			INSERT INTO counters(name, value)
+			VALUES ($1, $2)
+			RETURNING id
 		`,
-		rec.Name,
-		rec.Value,
-	).Scan(&rec.ID); err != nil {
+		[]any{rec.Name, rec.Value},
+		func(rows *sql.Rows) error {
+			return rows.Scan(&rec.ID)
+		},
+	); err != nil {
 		return nil, err
 	}
 
@@ -81,30 +91,33 @@ func (c *Counter) pushToDB(ctx context.Context, s storage.DBAble, rec *models.Co
 
 // Last возвращает последнюю запись из хранилища.
 func (c Counter) Last(ctx context.Context, mName string) (*models.Counter, error) {
-	if s, ok := c.storage.(storage.DBAble); ok {
+	if s, ok := c.storage.(DBAble); ok {
 		return c.lastFromDB(ctx, s, mName)
 	}
 
 	return c.lastFromMem(mName)
 }
 
-func (c Counter) lastFromDB(ctx context.Context, s storage.DBAble, mName string) (*models.Counter, error) {
-	row := s.DB().QueryRowContext(
-		ctx,
-		`
-		select value, id
-		from counters
-		where name = $1
-		order by id desc
-		limit 1`, mName)
+func (c Counter) lastFromDB(ctx context.Context, s DBAble, mName string) (*models.Counter, error) {
 	cntr := &models.Counter{Name: mName}
 
-	if err := row.Scan(&cntr.Value, &cntr.ID); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, storage.ErrNoRecords
-		} else {
-			return nil, err
-		}
+	if err := s.QueryRowContext(
+		ctx,
+		`
+		SELECT value, id
+		FROM counters
+		WHERE name = $1
+		ORDER BY id DESC
+		LIMIT 1`,
+		[]any{mName},
+		func(rows *sql.Rows) error {
+			if err := rows.Scan(&cntr.Value, &cntr.ID); err != nil {
+				return err
+			}
+			return nil
+		},
+	); err != nil {
+		return nil, fmt.Errorf("internal/server/repositories/counter.go: query row context error %w", err)
 	}
 
 	return cntr, nil
@@ -150,15 +163,16 @@ func (c Counter) All() map[string][]models.Counter { //nolint:dupl // :/
 
 // SaveCollection сохраняет пачку записей в хранилище
 func (c *Counter) SaveCollection(ctx context.Context, coll []models.Counter) ([]models.Counter, error) {
-	if s, ok := c.storage.(storage.DBAble); ok {
+	if s, ok := c.storage.(DBAble); ok {
 		return c.saveCollToDB(ctx, s, coll)
 	}
 
 	return c.saveCollToMem(coll)
 }
 
-func (c *Counter) saveCollToDB(ctx context.Context, s storage.DBAble, coll []models.Counter) ([]models.Counter, error) {
-	var names []string
+func (c *Counter) saveCollToDB(ctx context.Context, s DBAble, coll []models.Counter) ([]models.Counter, error) {
+	names := make([]string, 0, len(coll))
+
 	for _, n := range coll {
 		names = append(names, n.Name)
 	}
@@ -168,13 +182,13 @@ func (c *Counter) saveCollToDB(ctx context.Context, s storage.DBAble, coll []mod
 		return nil, err
 	}
 
-	tx, err := s.DB().BeginTx(ctx, &sql.TxOptions{})
+	tx, err := s.BeginTx(ctx, &sql.TxOptions{})
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
-		if commitErr := tx.Commit(); commitErr != nil {
-			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+		if commitErr := s.CommitTx(ctx, tx); commitErr != nil {
+			if rollbackErr := s.RollbackTx(ctx, tx); rollbackErr != nil {
 				c.lg.ErrorCtx(ctx, "failed to rollback transaction after commit error", zap.Error(rollbackErr))
 			}
 		}
@@ -187,21 +201,22 @@ func (c *Counter) saveCollToDB(ctx context.Context, s storage.DBAble, coll []mod
 			records[rec.Name] = rec
 		}
 
-		res := tx.QueryRowContext(
-			ctx,
+		if err := s.QueryRowContext(ctx,
 			`
-			insert into counters(name, value)
-			values ($1, $2)
-			returning id
+			INSERT INTO counters(name, value)
+			VALUES ($1, $2)
+			RETURNING id
 			`,
-			rec.Name,
-			rec.Value,
-		)
-		if err := res.Scan(&rec.ID); err != nil {
-			if rollbackErr := tx.Rollback(); rollbackErr != nil {
-				c.lg.ErrorCtx(ctx, "failed to rollback transaction after scan error", zap.Error(rollbackErr))
+			[]any{rec.Name, rec.Value},
+			func(rows *sql.Rows) error {
+				return rows.Scan(&rec.ID)
+			},
+		); err != nil {
+			if rollbackErr := s.RollbackTx(ctx, tx); rollbackErr != nil {
+				c.lg.ErrorCtx(ctx, "failed to rollback transaction after query row context error", zap.Error(rollbackErr))
 			}
-			return nil, fmt.Errorf("internal/server/repositories/counter.go: record scan failed error %w", err)
+
+			return nil, fmt.Errorf("internal/server/repositories/counter.go: query row context error %w", err)
 		}
 	}
 
@@ -219,44 +234,38 @@ func (c *Counter) saveCollToMem(coll []models.Counter) ([]models.Counter, error)
 
 // SearchByName осуществляет поиск записей по имени.
 func (c *Counter) SearchByName(ctx context.Context, names []string) (map[string]models.Counter, error) {
-	if s, ok := c.storage.(storage.DBAble); ok {
+	if s, ok := c.storage.(DBAble); ok {
 		return c.searchSumByNameInDB(ctx, s, names)
 	}
 
 	return c.searchByNameInMem(ctx, names)
 }
 
-func (c *Counter) searchSumByNameInDB(ctx context.Context, s storage.DBAble, names []string) (map[string]models.Counter, error) {
-	rows, err := s.DB().QueryContext(ctx,
+func (c *Counter) searchSumByNameInDB(ctx context.Context, s DBAble, names []string) (map[string]models.Counter, error) {
+	records := make(map[string]models.Counter, 100)
+	err := s.QueryRowContext(ctx,
 		`
-			select name, sum(value)
-			from counters
-			where name = any($1)
-			group by name;
+			SELECT name, sum(value)
+			FROM counters
+			WHERE name = ANY($1)
+			GROUP BY name;
 	`,
-		names,
+		[]any{names},
+		func(rows *sql.Rows) error {
+			for rows.Next() {
+				rec := models.Counter{}
+				if err := rows.Scan(&rec.Name, &rec.Value); err != nil {
+					return err
+				}
+				records[rec.Name] = rec
+			}
+
+			return nil
+		},
 	)
+
 	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if closeErr := rows.Close(); closeErr != nil {
-			c.lg.ErrorCtx(ctx, "failed to close rows", zap.Error(closeErr))
-		}
-	}()
-
-	records := make(map[string]models.Counter)
-	for rows.Next() {
-		rec := models.Counter{}
-		if err := rows.Scan(&rec.Name, &rec.Value); err != nil {
-			return nil, err
-		}
-
-		records[rec.Name] = rec
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("internal/server/repositories/counter.go: query row context error %w", err)
 	}
 
 	return records, nil

@@ -57,12 +57,6 @@ func (s *DBStorage) DB() *sql.DB {
 	return s.db
 }
 
-type DBAble interface {
-	Storage
-	Ping() error
-	DB() *sql.DB
-}
-
 const pgxDriver string = "pgx"
 
 func NewDBStorage(ctx context.Context, cfg config.Config, errg *errgroup.Group, lg *logging.ZapLogger) (Storage, error) {
@@ -137,4 +131,40 @@ func (s *DBStorage) migrate() error {
 	}
 
 	return nil
+}
+
+type ResultFunc func(rows *sql.Rows) error
+
+func (s *DBStorage) QueryRowContext(ctx context.Context, query string, args []any, result ResultFunc) error {
+	rows, err := s.db.QueryContext(ctx, query, args)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil {
+			s.lg.ErrorCtx(ctx, "failed to close rows", zap.Error(closeErr))
+		}
+	}()
+
+	if err := result(rows); err != nil {
+		return fmt.Errorf("db: query row result error %w", err)
+	}
+
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("db: query row error %w", err)
+	}
+
+	return nil
+}
+
+func (s *DBStorage) BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error) {
+	return s.db.BeginTx(ctx, opts)
+}
+
+func (s *DBStorage) CommitTx(ctx context.Context, tx *sql.Tx) error {
+	return tx.Commit()
+}
+
+func (s *DBStorage) RollbackTx(ctx context.Context, tx *sql.Tx) error {
+	return tx.Rollback()
 }
