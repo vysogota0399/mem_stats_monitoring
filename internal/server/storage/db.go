@@ -20,10 +20,18 @@ import (
 	"go.uber.org/zap"
 )
 
+type IDB interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	Ping() error
+	Close() error
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error)
+}
+
 // DBStorage реализация интерфейса Storage. В качестве зранилища используется база данных postgresql.
 type DBStorage struct {
 	dbDsn          string // строка подключения к базе данных.
-	db             *sql.DB
+	db             IDB
 	lg             *logging.ZapLogger
 	maxOpenRetries uint8 // максимальное количетсво попыток открыть соединение.
 }
@@ -51,10 +59,6 @@ func (s *DBStorage) Push(mType, mName string, val any) error {
 // Ping проверяет соединение с бащой данных.
 func (s *DBStorage) Ping() error {
 	return s.db.Ping()
-}
-
-func (s *DBStorage) DB() *sql.DB {
-	return s.db
 }
 
 const pgxDriver string = "pgx"
@@ -126,8 +130,10 @@ func (s *DBStorage) migrate() error {
 		return err
 	}
 
-	if err := goose.Up(s.db, "migrations"); err != nil {
-		return err
+	if db, ok := s.db.(*sql.DB); ok {
+		if err := goose.Up(db, "migrations"); err != nil {
+			return err
+		}
 	}
 
 	return nil
