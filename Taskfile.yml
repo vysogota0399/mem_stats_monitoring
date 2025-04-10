@@ -153,3 +153,17 @@ tasks:
     - go clean -testcache
     - go test ./... -coverprofile=coverage.out
     - go tool cover -func=coverage.out
+
+  keypair-test-coverage:
+    dir: internal/keypair
+    cmds:
+    - go clean -testcache
+    - go test ./... -coverprofile=coverage.out
+    - go tool cover -func=coverage.out
+
+  staticclient-test-coverage:
+    dir: internal/staticclient
+    cmds:
+    - go clean -testcache
+    - go test ./... -coverprofile=coverage.out
+    - go tool cover -func=coverage.out

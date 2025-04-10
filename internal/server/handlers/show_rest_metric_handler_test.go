@@ -136,3 +136,34 @@ func Test_showRestMetricHandlerFunc(t *testing.T) {
 		})
 	}
 }
+
+func TestNewShowRestMetricHandler(t *testing.T) {
+	type args struct {
+		strg storage.Storage
+		lg   *logging.ZapLogger
+	}
+	tests := []struct {
+		name string
+		args args
+		want gin.HandlerFunc
+	}{
+		{
+			name: "when valid storage and logger",
+			args: args{
+				strg: storage.NewMemory(),
+				lg:   func() *logging.ZapLogger { lg, _ := logging.MustZapLogger(-1); return lg }(),
+			},
+			want: func(c *gin.Context) {
+				// This is just a placeholder to verify the type
+				c.Status(200)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := NewShowRestMetricHandler(tt.args.strg, tt.args.lg)
+			assert.NotNil(t, got)
+			assert.IsType(t, tt.want, got)
+		})
+	}
+}

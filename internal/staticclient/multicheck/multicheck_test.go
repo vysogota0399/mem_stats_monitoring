@@ -3,6 +3,7 @@ package multicheck
 import (
 	"bytes"
 	"io"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -93,6 +94,55 @@ analyzers:
 			// Cleanup
 			err = tt.source.Close()
 			assert.NoError(t, err)
+		})
+	}
+}
+
+func TestNewMultiCheck(t *testing.T) {
+	type args struct {
+		lg *logging.ZapLogger
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    *MultiCheck
+		wantErr bool
+	}{
+		{
+			name: "successful creation without config file",
+			args: args{
+				lg: func() *logging.ZapLogger {
+					lg, err := logging.MustZapLogger(zap.DebugLevel)
+					if err != nil {
+						t.Fatal(err)
+					}
+					return lg
+				}(),
+			},
+			want: &MultiCheck{
+				ExtraAnalyzers: []Analyzer{},
+				lg:             nil, // Will be set in the test
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := NewMultiCheck(tt.args.lg)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("NewMultiCheck() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			// Compare the fields we care about
+			if !reflect.DeepEqual(got.ExtraAnalyzers, tt.want.ExtraAnalyzers) {
+				t.Errorf("NewMultiCheck() ExtraAnalyzers = %v, want %v", got.ExtraAnalyzers, tt.want.ExtraAnalyzers)
+			}
+
+			// Verify logger is set
+			if got.lg == nil {
+				t.Error("NewMultiCheck() logger is nil")
+			}
 		})
 	}
 }
