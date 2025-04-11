@@ -32,11 +32,13 @@ func main() {
 	info(lg)
 
 	ctx := context.Background()
-	agent.NewAgent(
+	agent := agent.NewAgent(
 		lg,
 		cfg,
 		storage.NewMemoryStorage(lg),
-	).Start(ctx)
+	)
+
+	agent.Start(ctx)
 }
 
 func info(lg *logging.ZapLogger) {
