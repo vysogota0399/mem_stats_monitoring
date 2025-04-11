@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/config"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/models"
+	mocks "github.com/vysogota0399/mem_stats_monitoring/internal/mocks/agent/clients"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
 	"go.uber.org/zap/zapcore"
 )
@@ -133,6 +134,7 @@ func TestReporter_UpdateMetric(t *testing.T) {
 		address     string
 		lg          *logging.ZapLogger
 		compressor  compressor
+		encryptor   *mocks.MockEncryptor
 		maxAttempts uint8
 		secretKey   []byte
 	}
@@ -161,6 +163,7 @@ func TestReporter_UpdateMetric(t *testing.T) {
 				compressor:  nil,
 				maxAttempts: 5,
 				secretKey:   nil,
+				encryptor:   mocks.NewMockEncryptor(ctrl),
 			},
 			args: args{
 				ctx:   context.Background(),
@@ -170,6 +173,10 @@ func TestReporter_UpdateMetric(t *testing.T) {
 			},
 			wantErr: false,
 			prepare: func(f *fields) {
+				f.encryptor.EXPECT().
+					Encrypt(gomock.Any()).
+					Return("encrypted", nil)
+
 				f.client.EXPECT().
 					Request(gomock.Any()).
 					Return(&http.Response{
@@ -187,6 +194,7 @@ func TestReporter_UpdateMetric(t *testing.T) {
 				compressor:  nil,
 				maxAttempts: 5,
 				secretKey:   nil,
+				encryptor:   mocks.NewMockEncryptor(ctrl),
 			},
 			args: args{
 				ctx:   context.Background(),
@@ -196,6 +204,10 @@ func TestReporter_UpdateMetric(t *testing.T) {
 			},
 			wantErr: false,
 			prepare: func(f *fields) {
+				f.encryptor.EXPECT().
+					Encrypt(gomock.Any()).
+					Return("encrypted", nil)
+
 				f.client.EXPECT().
 					Request(gomock.Any()).
 					Return(&http.Response{
@@ -213,6 +225,7 @@ func TestReporter_UpdateMetric(t *testing.T) {
 				compressor:  nil,
 				maxAttempts: 5,
 				secretKey:   nil,
+				encryptor:   mocks.NewMockEncryptor(ctrl),
 			},
 			args: args{
 				ctx:   context.Background(),
@@ -234,6 +247,7 @@ func TestReporter_UpdateMetric(t *testing.T) {
 				compressor:  nil,
 				secretKey:   nil,
 				maxAttempts: 1,
+				encryptor:   mocks.NewMockEncryptor(ctrl),
 			},
 			args: args{
 				ctx:   context.Background(),
@@ -243,6 +257,10 @@ func TestReporter_UpdateMetric(t *testing.T) {
 			},
 			wantErr: true,
 			prepare: func(f *fields) {
+				f.encryptor.EXPECT().
+					Encrypt(gomock.Any()).
+					Return("encrypted", nil)
+
 				f.client.EXPECT().Request(gomock.Any()).Return(nil, errors.New("request failed"))
 			},
 		},
@@ -254,6 +272,7 @@ func TestReporter_UpdateMetric(t *testing.T) {
 				lg:          lg,
 				compressor:  nil,
 				maxAttempts: 5,
+				encryptor:   mocks.NewMockEncryptor(ctrl),
 				secretKey:   nil,
 			},
 			args: args{
@@ -264,6 +283,10 @@ func TestReporter_UpdateMetric(t *testing.T) {
 			},
 			wantErr: true,
 			prepare: func(f *fields) {
+				f.encryptor.EXPECT().
+					Encrypt(gomock.Any()).
+					Return("encrypted", nil)
+
 				f.client.EXPECT().
 					Request(gomock.Any()).
 					Return(&http.Response{
@@ -285,10 +308,12 @@ func TestReporter_UpdateMetric(t *testing.T) {
 				&config.Config{
 					RateLimit:   10,
 					MaxAttempts: tt.fields.maxAttempts,
+					HTTPCert:    bytes.NewBuffer([]byte{}),
 				},
 				tt.fields.client,
 			)
 
+			c.encryptor = tt.fields.encryptor
 			err := c.UpdateMetric(tt.args.ctx, tt.args.mType, tt.args.mName, tt.args.value)
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -464,7 +489,6 @@ func TestReporter_UpdateMetrics(t *testing.T) {
 				},
 				tt.fields.client,
 			)
-
 			err := c.UpdateMetrics(tt.args.ctx, tt.args.data)
 			if tt.wantErr {
 				assert.Error(t, err)

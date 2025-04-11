@@ -56,8 +56,7 @@ IOLlRE1QeXDJuz9kAbWJSk0+ZkpGornCXCqI8TLOJ1XpcQG93A8DIM6n+jx8v/n/
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			encryptor, err := NewEncryptor(tt.args.cert)
-			assert.NoError(t, err)
+			encryptor := NewEncryptor(tt.args.cert)
 
 			message, err := encryptor.Encrypt(tt.args.message)
 			if tt.wantErr {

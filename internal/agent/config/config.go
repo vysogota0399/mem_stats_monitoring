@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"runtime"
 	"strconv"
@@ -19,7 +20,7 @@ type Config struct {
 	RateLimit      int           `json:"rate_limit" env:"RATE_LIMIT"`
 	ProfileAddress string        `json:"profile_address" env:"PROFILE_ADDRESS"`
 	MaxAttempts    uint8         `json:"max_attempts" env:"MAX_ATTEMPTS" envDefault:"5"`
-	CryptoKey      string        `json:"crypto_key" env:"CRYPTO_KEY"`
+	HTTPCert       io.Reader     `json:"crypto_key" env:"CRYPTO_KEY"`
 }
 
 func NewConfig() (Config, error) {
@@ -65,7 +66,11 @@ func NewConfig() (Config, error) {
 	}
 
 	if val, ok := os.LookupEnv("CRYPTO_KEY"); ok {
-		c.CryptoKey = val
+		if cert, err := prepareCert(val); err != nil {
+			return c, fmt.Errorf("config: failed to prepare cert: %w", err)
+		} else {
+			c.HTTPCert = cert
+		}
 	}
 
 	if val, ok := os.LookupEnv("MAX_ATTEMPTS"); ok {
@@ -87,7 +92,7 @@ func (c *Config) String() string {
 	return string(b)
 }
 
-func (c *Config) parseFlags() {
+func (c *Config) parseFlags() error {
 	var (
 		pollInterval   int64
 		reportInterval int64
@@ -119,11 +124,31 @@ func (c *Config) parseFlags() {
 	}
 
 	if flag.Lookup("crypto-key") == nil {
-		flag.StringVar(&c.CryptoKey, "crypto-key", "", "Crypto key for encryption")
+		var certPath string
+		flag.StringVar(&certPath, "crypto-key", "", "Crypto key for encryption")
+		cert, err := prepareCert(certPath)
+		if err != nil {
+			return fmt.Errorf("config: failed to prepare cert: %w", err)
+		}
+		c.HTTPCert = cert
 	}
 
 	flag.Parse()
 
 	c.PollInterval = time.Duration(pollInterval) * time.Second
 	c.ReportInterval = time.Duration(reportInterval) * time.Second
+
+	return nil
+}
+
+func prepareCert(val string) (io.Reader, error) {
+	if val == "" {
+		return nil, nil
+	}
+
+	cert, err := os.Open(val)
+	if err != nil {
+		return nil, fmt.Errorf("config: failed to open cert: %w", err)
+	}
+	return cert, nil
 }
