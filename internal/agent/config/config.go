@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -146,9 +147,17 @@ func prepareCert(val string) (io.Reader, error) {
 		return nil, nil
 	}
 
-	cert, err := os.Open(val)
+	cert := &bytes.Buffer{}
+	file, err := os.Open(val)
 	if err != nil {
 		return nil, fmt.Errorf("config: failed to open cert: %w", err)
 	}
+	defer file.Close()
+
+	_, err = io.Copy(cert, file)
+	if err != nil {
+		return nil, fmt.Errorf("config: failed to copy cert: %w", err)
+	}
+
 	return cert, nil
 }

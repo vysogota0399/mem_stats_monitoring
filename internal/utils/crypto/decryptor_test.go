@@ -88,8 +88,7 @@ yxKZlQ/bpyBAbIhe9BQ1j6cjfQo+
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			decryptor, err := NewDecryptor(tt.fields.privateKey)
-			assert.NoError(t, err)
+			decryptor := NewDecryptor(tt.fields.privateKey)
 
 			got, err := decryptor.Decrypt(tt.args.ciphertext)
 			if tt.wantErr {
