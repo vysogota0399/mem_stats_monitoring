@@ -8,26 +8,31 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
-	"os"
+	"io"
 )
 
 type Encryptor struct {
 	publicKey *rsa.PublicKey
 }
 
-func NewEncryptor(pkpath string) (*Encryptor, error) {
-	pk, err := os.ReadFile(pkpath)
+func NewEncryptor(cert io.Reader) (*Encryptor, error) {
+	certBytes, err := io.ReadAll(cert)
 	if err != nil {
 		return nil, fmt.Errorf("encryptor: failed to read public key: %w", err)
 	}
 
-	block, _ := pem.Decode(pk)
+	block, _ := pem.Decode(certBytes)
 	if block == nil {
 		return nil, fmt.Errorf("encryptor: failed to decode public key")
 	}
-	publicKey, err := x509.ParsePKCS1PublicKey(block.Bytes)
+	parsedCert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
 		return nil, fmt.Errorf("encryptor: failed to parse public key: %w", err)
+	}
+
+	publicKey, ok := parsedCert.PublicKey.(*rsa.PublicKey)
+	if !ok {
+		return nil, fmt.Errorf("encryptor: failed to cast public key to rsa.PublicKey")
 	}
 
 	return &Encryptor{publicKey: publicKey}, nil

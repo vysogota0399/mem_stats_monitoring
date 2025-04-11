@@ -8,20 +8,20 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
-	"os"
+	"io"
 )
 
 type Decryptor struct {
 	privateKey *rsa.PrivateKey
 }
 
-func NewDecryptor(skpath string) (*Decryptor, error) {
-	sk, err := os.ReadFile(skpath)
+func NewDecryptor(pk io.Reader) (*Decryptor, error) {
+	pkdata, err := io.ReadAll(pk)
 	if err != nil {
 		return nil, fmt.Errorf("decryptor: failed to read private key: %w", err)
 	}
 
-	block, _ := pem.Decode(sk)
+	block, _ := pem.Decode(pkdata)
 	if block == nil {
 		return nil, fmt.Errorf("decryptor: failed to decode private key")
 	}
