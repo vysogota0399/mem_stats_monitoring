@@ -21,6 +21,8 @@ func TestNewConfig(t *testing.T) {
 	assert.NoError(t, err)
 	err = os.Setenv("RATE_LIMIT", "10")
 	assert.NoError(t, err)
+	err = os.Setenv("CRYPTO_KEY", "")
+	assert.NoError(t, err)
 
 	cfg, err := NewConfig()
 	assert.NoError(t, err)
