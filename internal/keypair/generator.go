@@ -1,3 +1,17 @@
+// Package keypair provides functionality for generating RSA key pairs and X.509 certificates.
+// It supports configurable certificate attributes and concurrent generation of private keys
+// and certificates. The package uses the crypto/rsa package for key generation and
+// crypto/x509 for certificate creation.
+//
+// The main component is the Generator type which handles the key pair generation process.
+// It can be configured with various certificate attributes like country, organization,
+// common name, etc. The generation process is context-aware and can be cancelled.
+//
+// Example usage:
+//   cfg := &config.Config{...}
+//   lg := logging.NewZapLogger()
+//   generator := NewGenerator(cfg, lg)
+//   err := generator.Call(ctx)
 package keypair
 
 import (
