@@ -222,6 +222,11 @@ func (c *Reporter) requestDo(ctx context.Context, req *http.Request) (*http.Resp
 			return
 		}
 
+		if encErr := c.encryptRequest(ctx, req); encErr != nil {
+			errChan <- fmt.Errorf("internal/agent/clients/reporter encrypt request error %w", encErr)
+			return
+		}
+
 		resp, reqErr := c.client.Request(req)
 		if reqErr != nil {
 			errChan <- fmt.Errorf("internal/agent/clients/reporter send request error %w", reqErr)
@@ -289,6 +294,14 @@ func (c *Reporter) signRequest(ctx context.Context, r *http.Request) error {
 	}
 
 	r.Header.Add(signHeaderKey, base64.StdEncoding.EncodeToString(sign))
+
+	return nil
+}
+
+func (c *Reporter) encryptRequest(ctx context.Context, r *http.Request) error {
+	if len(c.secretKey) == 0 {
+		return nil
+	}
 
 	return nil
 }

@@ -19,6 +19,7 @@ type Config struct {
 	RateLimit      int           `json:"rate_limit" env:"RATE_LIMIT"`
 	ProfileAddress string        `json:"profile_address" env:"PROFILE_ADDRESS"`
 	MaxAttempts    uint8         `json:"max_attempts" env:"MAX_ATTEMPTS" envDefault:"5"`
+	CryptoKey      string        `json:"crypto_key" env:"CRYPTO_KEY"`
 }
 
 func NewConfig() (Config, error) {
@@ -61,6 +62,10 @@ func NewConfig() (Config, error) {
 			return c, err
 		}
 		c.RateLimit = int(rLimit)
+	}
+
+	if val, ok := os.LookupEnv("CRYPTO_KEY"); ok {
+		c.CryptoKey = val
 	}
 
 	if val, ok := os.LookupEnv("MAX_ATTEMPTS"); ok {
@@ -111,6 +116,10 @@ func (c *Config) parseFlags() {
 
 	if flag.Lookup("l") == nil {
 		flag.IntVar(&c.RateLimit, "l", runtime.GOMAXPROCS(0), "Reporter worker pool limit")
+	}
+
+	if flag.Lookup("crypto-key") == nil {
+		flag.StringVar(&c.CryptoKey, "crypto-key", "", "Crypto key for encryption")
 	}
 
 	flag.Parse()
