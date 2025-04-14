@@ -109,7 +109,11 @@ func (m *PersistentMemory) restore() ([]persistentMetric, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer from.Close()
+	defer func() {
+		if closeErr := from.Close(); closeErr != nil {
+			m.lg.ErrorCtx(ctx, "failed to close data source", zap.Error(closeErr))
+		}
+	}()
 
 	scanner := *bufio.NewScanner(from)
 	var sucCntr int64

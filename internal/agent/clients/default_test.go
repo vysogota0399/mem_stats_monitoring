@@ -1,6 +1,7 @@
 package clients
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -19,7 +20,8 @@ func TestDefault_Request(t *testing.T) {
 	// Create a test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("test response"))
+		_, err := w.Write([]byte("test response"))
+		assert.NoError(t, err)
 	}))
 	defer server.Close()
 
@@ -56,14 +58,18 @@ func TestDefault_Request(t *testing.T) {
 				assert.Error(t, err)
 				return
 			}
-			defer resp.Body.Close()
+			defer func() {
+				if err = resp.Body.Close(); err != nil {
+					t.Errorf("failed to close response body: %v", err)
+				}
+			}()
 
 			assert.NoError(t, err)
 			assert.NotNil(t, resp)
 			assert.Equal(t, tt.expectedStatus, resp.StatusCode)
 
-			body := make([]byte, len(tt.expectedBody))
-			resp.Body.Read(body)
+			body, err := io.ReadAll(resp.Body)
+			assert.NoError(t, err)
 			assert.Equal(t, tt.expectedBody, string(body))
 		})
 	}

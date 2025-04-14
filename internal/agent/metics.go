@@ -172,23 +172,24 @@ var customMetricsDefinition = []CustomMetric{
 		Name: "PollCount",
 		Type: "counter",
 		generateValue: func(m *CustomMetric, a *Agent) (uint64, error) {
-			var val uint64
+			var pollCount uint64
+			var err error
 
 			to := a.metricsPool.Get()
-			if err := a.storage.Get(to); err != nil && !errors.Is(err, storage.ErrNoRecords) {
-				return val, err
+			if err = a.storage.Get(to); err != nil && !errors.Is(err, storage.ErrNoRecords) {
+				return pollCount, err
 			}
 
 			if to.Name == "" && to.Type == "" {
-				val = 0
+				pollCount = 0
 			} else {
-				val, err := strconv.ParseUint(to.Value, 10, 64)
+				pollCount, err = strconv.ParseUint(to.Value, 10, 64)
 				if err != nil {
-					return val, err
+					return pollCount, err
 				}
 			}
 
-			return val + 1, nil
+			return pollCount + 1, nil
 		},
 	},
 	{

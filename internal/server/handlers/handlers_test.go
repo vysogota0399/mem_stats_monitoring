@@ -47,7 +47,7 @@ func Example() {
 	logger, _ := logging.MustZapLogger(zapcore.Level(cfg.LogLevel))
 
 	// Инициализация сервисов
-	services := service.New(storage)
+	services := service.New(storage, logger)
 
 	// Инициализкация хендлера
 	h := handlers.NewUpdatesRestMetricsHandler(storage, services.UpdateMetricsService, logger)
@@ -74,5 +74,9 @@ func Example() {
 			[]byte("[{\"id\": \"test\",\"type\": \"counter\",\"delta\": 1}]"),
 		),
 	)
-	response.Body.Close()
+	defer func() {
+		if err := response.Body.Close(); err != nil {
+			panic(err)
+		}
+	}()
 }

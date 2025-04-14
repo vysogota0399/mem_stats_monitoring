@@ -12,8 +12,15 @@ import (
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/service"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
+	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"golang.org/x/sync/errgroup"
+)
+
+var (
+	BuildVersion string = "N/A"
+	BuildDate    string = "N/A"
+	BuildCommit  string = "N/A"
 )
 
 func main() {
@@ -39,6 +46,8 @@ func run() {
 		log.Fatal(err)
 	}
 
+	info(lg)
+
 	strg, err := storage.NewStorage(ctx, cfg, errg, lg)
 	if err != nil {
 		log.Fatal(err)
@@ -48,7 +57,7 @@ func run() {
 		ctx,
 		cfg,
 		strg,
-		service.New(strg),
+		service.New(strg, lg),
 		lg,
 	)
 
@@ -57,4 +66,12 @@ func run() {
 	if err := errg.Wait(); err != nil {
 		lg.FatalCtx(ctx, err.Error())
 	}
+}
+
+func info(lg *logging.ZapLogger) {
+	lg.InfoCtx(context.Background(), "Build info",
+		zap.String("version", BuildVersion),
+		zap.String("date", BuildDate),
+		zap.String("commit", BuildCommit),
+	)
 }
