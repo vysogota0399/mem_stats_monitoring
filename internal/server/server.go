@@ -47,6 +47,7 @@ type Server struct {
 	secretKey []byte
 	htmlRoute bool
 	server    IServer
+	decrypter Decrypter
 }
 
 // NewServer creates a new Server instance with the specified configuration
@@ -66,6 +67,7 @@ func NewServer(
 		lg:        lg,
 		secretKey: []byte(c.Key),
 		htmlRoute: true,
+		decrypter: crypto.NewDecryptor(c.PrivateKey),
 	}
 
 	s.router.Use(
@@ -73,6 +75,7 @@ func NewServer(
 		headers(),
 		httpLogger(ctx, lg),
 		s.signer(),
+		s.decrypterMiddleware(),
 		gzip.Gzip(gzip.DefaultCompression),
 	)
 
@@ -298,4 +301,35 @@ var withTestServer ServerOption = func(s *Server) error {
 
 	s.server = srv
 	return nil
+}
+
+type Decrypter interface {
+	Decrypt(ciphertext string) (string, error)
+}
+
+func (s *Server) decrypterMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if s.config.PrivateKey == nil {
+			c.Next()
+			return
+		}
+
+		bodyBuff := &bytes.Buffer{}
+		if _, err := io.Copy(bodyBuff, c.Request.Body); err != nil {
+			s.lg.ErrorCtx(c, "read body error", zap.Error(err))
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+
+		decrypted, err := s.decrypter.Decrypt(bodyBuff.String())
+		if err != nil {
+			s.lg.ErrorCtx(c, "decrypt error", zap.Error(err))
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+
+		c.Request.Body = io.NopCloser(bytes.NewBufferString(decrypted))
+
+		c.Next()
+	}
 }

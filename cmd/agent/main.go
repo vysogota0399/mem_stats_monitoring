@@ -19,7 +19,7 @@ var (
 )
 
 func main() {
-	cfg, err := config.NewConfig()
+	cfg, err := config.NewConfig(nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -32,11 +32,13 @@ func main() {
 	info(lg)
 
 	ctx := context.Background()
-	agent.NewAgent(
+	agent := agent.NewAgent(
 		lg,
 		cfg,
 		storage.NewMemoryStorage(lg),
-	).Start(ctx)
+	)
+
+	agent.Start(ctx)
 }
 
 func info(lg *logging.ZapLogger) {

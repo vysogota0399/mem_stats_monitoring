@@ -11,7 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
-	"github.com/vysogota0399/mem_stats_monitoring/internal/server/handlers/mocks"
+	mocks "github.com/vysogota0399/mem_stats_monitoring/internal/mocks/server/handlers"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
 	"go.uber.org/zap/zapcore"

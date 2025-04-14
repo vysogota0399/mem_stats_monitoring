@@ -9,21 +9,24 @@ import (
 	"go.uber.org/zap"
 )
 
+type DBAble interface {
+	Ping() error
+}
+
 type PingHandler struct {
-	storage storage.DBAble
+	storage DBAble
 	lg      *logging.ZapLogger
 	skip    bool
 }
 
 func NewPingHandler(strg storage.Storage, lg *logging.ZapLogger) gin.HandlerFunc {
 	h := &PingHandler{lg: lg}
-	s, ok := strg.(storage.DBAble)
+	s, ok := strg.(DBAble)
 	if !ok {
 		h.skip = true
 	} else {
 		h.storage = s
 	}
-
 	return PingHandlerFunc(h)
 }
 

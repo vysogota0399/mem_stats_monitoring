@@ -1,14 +1,22 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"runtime"
 	"strconv"
 	"time"
+
+	"go.uber.org/zap"
 )
+
+type FileConfigurer interface {
+	Configure(c *Config) error
+}
 
 type Config struct {
 	ServerURL      string        `json:"server_url"`
@@ -19,11 +27,14 @@ type Config struct {
 	RateLimit      int           `json:"rate_limit" env:"RATE_LIMIT"`
 	ProfileAddress string        `json:"profile_address" env:"PROFILE_ADDRESS"`
 	MaxAttempts    uint8         `json:"max_attempts" env:"MAX_ATTEMPTS" envDefault:"5"`
+	HTTPCert       io.Reader     `json:"crypto_key" env:"CRYPTO_KEY"`
 }
 
-func NewConfig() (Config, error) {
+func NewConfig(f FileConfigurer) (Config, error) {
 	c := Config{}
-	c.parseFlags()
+	if err := c.parseFlags(); err != nil {
+		return Config{}, fmt.Errorf("config: failed to parse flags: %w", err)
+	}
 
 	if val, ok := os.LookupEnv("POLL_INTERVAL"); ok {
 		if val, err := strconv.Atoi(val); err == nil {
@@ -63,6 +74,14 @@ func NewConfig() (Config, error) {
 		c.RateLimit = int(rLimit)
 	}
 
+	if val, ok := os.LookupEnv("CRYPTO_KEY"); ok {
+		if cert, err := prepareCert(val); err != nil {
+			return c, fmt.Errorf("config: failed to prepare cert: %w", err)
+		} else {
+			c.HTTPCert = cert
+		}
+	}
+
 	if val, ok := os.LookupEnv("MAX_ATTEMPTS"); ok {
 		maxAttempts, err := strconv.ParseUint(val, 10, 8)
 		if err != nil {
@@ -74,6 +93,15 @@ func NewConfig() (Config, error) {
 	}
 
 	c.ServerURL = fmt.Sprintf("http://%s", c.ServerURL)
+
+	if f == nil {
+		return c, nil
+	}
+
+	if err := f.Configure(&c); err != nil {
+		return Config{}, fmt.Errorf("config: failed to configure from file: %w", err)
+	}
+
 	return c, nil
 }
 
@@ -82,7 +110,7 @@ func (c *Config) String() string {
 	return string(b)
 }
 
-func (c *Config) parseFlags() {
+func (c *Config) parseFlags() error {
 	var (
 		pollInterval   int64
 		reportInterval int64
@@ -113,8 +141,44 @@ func (c *Config) parseFlags() {
 		flag.IntVar(&c.RateLimit, "l", runtime.GOMAXPROCS(0), "Reporter worker pool limit")
 	}
 
+	if flag.Lookup("crypto-key") == nil {
+		var certPath string
+		flag.StringVar(&certPath, "crypto-key", "", "Crypto key for encryption")
+		cert, err := prepareCert(certPath)
+		if err != nil {
+			return fmt.Errorf("config: failed to prepare cert: %w", err)
+		}
+		c.HTTPCert = cert
+	}
+
 	flag.Parse()
 
 	c.PollInterval = time.Duration(pollInterval) * time.Second
 	c.ReportInterval = time.Duration(reportInterval) * time.Second
+
+	return nil
+}
+
+func prepareCert(val string) (io.Reader, error) {
+	if val == "" {
+		return nil, nil
+	}
+
+	cert := &bytes.Buffer{}
+	file, err := os.Open(val)
+	if err != nil {
+		return nil, fmt.Errorf("config: failed to open cert: %w", err)
+	}
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			zap.L().Error("config: failed to close cert: %w", zap.Error(closeErr))
+		}
+	}()
+
+	_, err = io.Copy(cert, file)
+	if err != nil {
+		return nil, fmt.Errorf("config: failed to copy cert: %w", err)
+	}
+
+	return cert, nil
 }

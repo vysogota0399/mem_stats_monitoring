@@ -22,8 +22,10 @@ func TestNewConfig(t *testing.T) {
 	assert.NoError(t, err)
 	err = os.Setenv("DATABASE_DSN", "pg@pg")
 	assert.NoError(t, err)
+	err = os.Setenv("CRYPTO_KEY", "")
+	assert.NoError(t, err)
 
-	cfg, err := NewConfig()
+	cfg, err := NewConfig(nil)
 	assert.NoError(t, err)
 
 	assert.Equal(t, cfg.Address, "localhost")

@@ -42,9 +42,25 @@ func New() Storage {
 	return NewMemory()
 }
 
-func NewStorage(ctx context.Context, cfg config.Config, errg *errgroup.Group, lg *logging.ZapLogger) (Storage, error) {
+func NewStorage(
+	ctx context.Context,
+	cfg config.Config,
+	errg *errgroup.Group,
+	lg *logging.ZapLogger,
+) (Storage, error) {
 	if cfg.IsDBDSNPresent() {
-		return NewDBStorage(ctx, cfg, errg, lg)
+		return NewDBStorage(
+			ctx,
+			cfg,
+			errg,
+			lg,
+			&GooseMigrator{},
+			&PGConnectionOpener{
+				lg:             lg,
+				dbDsn:          cfg.DatabaseDSN,
+				maxOpenRetries: 4,
+			},
+		)
 	} else {
 		return NewFilePersistentMemory(ctx, cfg, errg, lg)
 	}

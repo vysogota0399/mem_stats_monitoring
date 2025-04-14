@@ -36,13 +36,15 @@ type Requester interface {
 
 // Reporter handles the communication with the metrics server
 type Reporter struct {
-	client      Requester
-	address     string
-	lg          *logging.ZapLogger
-	compressor  compressor
-	maxAttempts uint8
-	secretKey   []byte
-	semaphore   *semaphore
+	client        Requester
+	address       string
+	lg            *logging.ZapLogger
+	compressor    compressor
+	maxAttempts   uint8
+	secretKey     []byte
+	semaphore     *semaphore
+	publicKeyPath io.Reader
+	encryptor     Encryptor
 }
 
 // NewReporter creates a new Reporter instance with basic configuration
@@ -77,16 +79,22 @@ func NewSemaphore(maxReq int) *semaphore {
 	}
 }
 
+type Encryptor interface {
+	Encrypt(b []byte) (string, error)
+}
+
 // NewCompReporter creates a new Reporter instance with compression and rate limiting
 func NewCompReporter(address string, lg *logging.ZapLogger, cfg *config.Config, client Requester) *Reporter {
 	return &Reporter{
-		address:     address,
-		client:      client,
-		lg:          lg,
-		compressor:  gzbody,
-		maxAttempts: cfg.MaxAttempts,
-		secretKey:   []byte(cfg.Key),
-		semaphore:   NewSemaphore(cfg.RateLimit),
+		address:       address,
+		client:        client,
+		lg:            lg,
+		compressor:    gzbody,
+		maxAttempts:   cfg.MaxAttempts,
+		secretKey:     []byte(cfg.Key),
+		semaphore:     NewSemaphore(cfg.RateLimit),
+		publicKeyPath: cfg.HTTPCert,
+		encryptor:     crypto.NewEncryptor(cfg.HTTPCert),
 	}
 }
 
@@ -222,6 +230,11 @@ func (c *Reporter) requestDo(ctx context.Context, req *http.Request) (*http.Resp
 			return
 		}
 
+		if encErr := c.encryptRequest(ctx, req); encErr != nil {
+			errChan <- fmt.Errorf("internal/agent/clients/reporter encrypt request error %w", encErr)
+			return
+		}
+
 		resp, reqErr := c.client.Request(req)
 		if reqErr != nil {
 			errChan <- fmt.Errorf("internal/agent/clients/reporter send request error %w", reqErr)
@@ -289,6 +302,26 @@ func (c *Reporter) signRequest(ctx context.Context, r *http.Request) error {
 	}
 
 	r.Header.Add(signHeaderKey, base64.StdEncoding.EncodeToString(sign))
+
+	return nil
+}
+
+func (c *Reporter) encryptRequest(ctx context.Context, r *http.Request) error {
+	if c.encryptor == nil {
+		return nil
+	}
+
+	b, ok := ctx.Value(bKey).([]byte)
+	if !ok {
+		return ErrBodyKeyNotFoundInContext
+	}
+
+	encrypted, err := c.encryptor.Encrypt(b)
+	if err != nil {
+		return fmt.Errorf("internal/agent/clients/reporter encrypt request error %w", err)
+	}
+
+	r.Body = io.NopCloser(bytes.NewBuffer([]byte(encrypted)))
 
 	return nil
 }
