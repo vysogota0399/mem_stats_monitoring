@@ -10,7 +10,12 @@ import (
 	"os"
 
 	"github.com/caarlos0/env"
+	"go.uber.org/zap"
 )
+
+type FileConfigurer interface {
+	Configure(c *Config) error
+}
 
 // Config holds all configuration parameters for the server
 type Config struct {
@@ -32,7 +37,7 @@ func (c Config) String() string {
 }
 
 // NewConfig creates a new Config instance by parsing command line flags and environment variables
-func NewConfig() (Config, error) {
+func NewConfig(f FileConfigurer) (Config, error) {
 	c := Config{}
 	if err := c.parseFlags(); err != nil {
 		return Config{}, fmt.Errorf("internal/server/config.go parse flags error %w", err)
@@ -40,6 +45,14 @@ func NewConfig() (Config, error) {
 
 	if err := c.prseEnvs(); err != nil {
 		return Config{}, fmt.Errorf("internal/server/config.go parse env error %w", err)
+	}
+
+	if f == nil {
+		return c, nil
+	}
+
+	if err := f.Configure(&c); err != nil {
+		return Config{}, fmt.Errorf("internal/server/config.go configure error %w", err)
 	}
 
 	return c, nil
@@ -61,11 +74,11 @@ func (c *Config) parseFlags() error {
 	if flag.Lookup("crypto-key") == nil {
 		var path string
 		flag.StringVar(&path, "crypto-key", "", "path to the private key file")
-		cert, err := prepareCert(path)
+		pk, err := preparePrivateKey(path)
 		if err != nil {
 			return fmt.Errorf("internal/server/config.go parse flags error %w", err)
 		}
-		c.PrivateKey = cert
+		c.PrivateKey = pk
 	}
 
 	flag.Parse()
@@ -85,17 +98,17 @@ func (c *Config) prseEnvs() error {
 	}
 
 	if val, ok := os.LookupEnv("CRYPTO_KEY"); ok {
-		if cert, err := prepareCert(val); err != nil {
+		if pk, err := preparePrivateKey(val); err != nil {
 			return fmt.Errorf("internal/server/config.go parse env error %w", err)
 		} else {
-			c.PrivateKey = cert
+			c.PrivateKey = pk
 		}
 	}
 
 	return nil
 }
 
-func prepareCert(val string) (io.Reader, error) {
+func preparePrivateKey(val string) (io.Reader, error) {
 	if val == "" {
 		return nil, nil
 	}
@@ -105,7 +118,11 @@ func prepareCert(val string) (io.Reader, error) {
 	if err != nil {
 		return nil, fmt.Errorf("internal/server/config.go prepare cert error %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			zap.L().Error("config: failed to close file: %w", zap.Error(closeErr))
+		}
+	}()
 
 	_, err = io.Copy(cert, file)
 	if err != nil {

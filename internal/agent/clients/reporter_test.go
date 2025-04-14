@@ -489,6 +489,7 @@ func TestReporter_UpdateMetrics(t *testing.T) {
 				},
 				tt.fields.client,
 			)
+			c.encryptor = nil
 			err := c.UpdateMetrics(tt.args.ctx, tt.args.data)
 			if tt.wantErr {
 				assert.Error(t, err)

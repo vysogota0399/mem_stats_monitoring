@@ -22,7 +22,7 @@ func TestNewAgent(t *testing.T) {
 	logger, err := logging.MustZapLogger(-1)
 	assert.NoError(t, err)
 	store := storage.NewMemoryStorage(logger)
-	cfg, err := config.NewConfig()
+	cfg, err := config.NewConfig(nil)
 	assert.NoError(t, err)
 
 	agent := NewAgent(logger, cfg, store)
@@ -62,7 +62,7 @@ func TestGenMetrics(t *testing.T) {
 	assert.NoError(t, err)
 
 	store := storage.NewMemoryStorage(logger)
-	cfg, err := config.NewConfig()
+	cfg, err := config.NewConfig(nil)
 	assert.NoError(t, err)
 
 	agent := NewAgent(logger, cfg, store)

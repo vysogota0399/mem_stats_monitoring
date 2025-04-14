@@ -10,7 +10,13 @@ import (
 	"runtime"
 	"strconv"
 	"time"
+
+	"go.uber.org/zap"
 )
+
+type FileConfigurer interface {
+	Configure(c *Config) error
+}
 
 type Config struct {
 	ServerURL      string        `json:"server_url"`
@@ -24,9 +30,11 @@ type Config struct {
 	HTTPCert       io.Reader     `json:"crypto_key" env:"CRYPTO_KEY"`
 }
 
-func NewConfig() (Config, error) {
+func NewConfig(f FileConfigurer) (Config, error) {
 	c := Config{}
-	c.parseFlags()
+	if err := c.parseFlags(); err != nil {
+		return Config{}, fmt.Errorf("config: failed to parse flags: %w", err)
+	}
 
 	if val, ok := os.LookupEnv("POLL_INTERVAL"); ok {
 		if val, err := strconv.Atoi(val); err == nil {
@@ -85,6 +93,15 @@ func NewConfig() (Config, error) {
 	}
 
 	c.ServerURL = fmt.Sprintf("http://%s", c.ServerURL)
+
+	if f == nil {
+		return c, nil
+	}
+
+	if err := f.Configure(&c); err != nil {
+		return Config{}, fmt.Errorf("config: failed to configure from file: %w", err)
+	}
+
 	return c, nil
 }
 
@@ -152,7 +169,11 @@ func prepareCert(val string) (io.Reader, error) {
 	if err != nil {
 		return nil, fmt.Errorf("config: failed to open cert: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			zap.L().Error("config: failed to close cert: %w", zap.Error(closeErr))
+		}
+	}()
 
 	_, err = io.Copy(cert, file)
 	if err != nil {

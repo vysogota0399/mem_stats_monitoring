@@ -25,7 +25,7 @@ func TestNewConfig(t *testing.T) {
 	err = os.Setenv("CRYPTO_KEY", "")
 	assert.NoError(t, err)
 
-	cfg, err := NewConfig()
+	cfg, err := NewConfig(nil)
 	assert.NoError(t, err)
 
 	assert.Equal(t, cfg.Address, "localhost")
