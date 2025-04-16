@@ -17,7 +17,6 @@ import (
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/models"
 	mocks "github.com/vysogota0399/mem_stats_monitoring/internal/mocks/agent/clients"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
-	"go.uber.org/zap/zapcore"
 )
 
 func BenchmarkReporter_UpdateMetrics(b *testing.B) {
@@ -28,7 +27,7 @@ func BenchmarkReporter_UpdateMetrics(b *testing.B) {
 	response := &http.Response{StatusCode: http.StatusOK}
 	response.Body = io.NopCloser(bytes.NewBuffer([]byte{}))
 
-	lg, err := logging.MustZapLogger(zapcore.ErrorLevel)
+	lg, err := logging.MustZapLogger(&config.Config{LogLevel: 2})
 	assert.NoError(b, err)
 
 	reporter := NewCompReporter("", lg, &config.Config{RateLimit: 10}, client)
@@ -99,7 +98,7 @@ func BenchmarkReporter_bytesreader(b *testing.B) {
 
 func TestNewReporter(t *testing.T) {
 	// Create test dependencies
-	lg, err := logging.MustZapLogger(zapcore.DebugLevel)
+	lg, err := logging.MustZapLogger(&config.Config{LogLevel: 1})
 	assert.NoError(t, err)
 
 	ctrl := gomock.NewController(t)
@@ -116,7 +115,7 @@ func TestNewReporter(t *testing.T) {
 	assert.Equal(t, address, reporter.address)
 	assert.Equal(t, lg, reporter.lg)
 	assert.Equal(t, mockClient, reporter.client)
-	assert.Equal(t, uint8(5), reporter.maxAttempts)
+	assert.Equal(t, uint8(2), reporter.maxAttempts)
 	assert.Nil(t, reporter.compressor)
 	assert.Nil(t, reporter.secretKey)
 	assert.Nil(t, reporter.semaphore)
@@ -126,7 +125,7 @@ func TestReporter_UpdateMetric(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	lg, err := logging.MustZapLogger(zapcore.DebugLevel)
+	lg, err := logging.MustZapLogger(&config.Config{LogLevel: 1})
 	assert.NoError(t, err)
 
 	type fields struct {
@@ -328,7 +327,7 @@ func TestReporter_UpdateMetrics(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	lg, err := logging.MustZapLogger(zapcore.DebugLevel)
+	lg, err := logging.MustZapLogger(&config.Config{LogLevel: 1})
 	assert.NoError(t, err)
 
 	type fields struct {

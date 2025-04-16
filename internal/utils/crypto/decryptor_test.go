@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/server/config"
 )
 
 func TestDecryptor_Decrypt(t *testing.T) {
@@ -88,7 +89,7 @@ yxKZlQ/bpyBAbIhe9BQ1j6cjfQo+
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			decryptor := NewDecryptor(tt.fields.privateKey)
+			decryptor := NewDecryptor(&config.Config{PrivateKey: tt.fields.privateKey})
 
 			got, err := decryptor.Decrypt(tt.args.ciphertext)
 			if tt.wantErr {

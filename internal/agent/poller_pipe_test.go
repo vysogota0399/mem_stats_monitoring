@@ -10,7 +10,6 @@ import (
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/storage"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
-	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -22,7 +21,7 @@ func BenchmarkAgent_genCustromMetrics(b *testing.B) {
 		customMetrics []CustomMetric
 	}
 
-	lg, err := logging.MustZapLogger(zap.DebugLevel)
+	lg, err := logging.MustZapLogger(&config.Config{LogLevel: 1})
 	assert.NoError(b, err)
 	cfg := config.Config{}
 
@@ -88,7 +87,7 @@ func BenchmarkAgent_genRuntimeMetrics(b *testing.B) {
 		runtimeMetrics []RuntimeMetric
 	}
 
-	lg, err := logging.MustZapLogger(zap.DebugLevel)
+	lg, err := logging.MustZapLogger(&config.Config{LogLevel: 1})
 	assert.NoError(b, err)
 	cfg := config.Config{}
 
@@ -154,7 +153,7 @@ func BenchmarkAgent_genVirtualMemoryMetrics(b *testing.B) {
 		virtualMemory []VirtualMemoryMetric
 	}
 
-	lg, err := logging.MustZapLogger(zap.DebugLevel)
+	lg, err := logging.MustZapLogger(&config.Config{LogLevel: 1})
 	assert.NoError(b, err)
 	cfg := config.Config{}
 
@@ -220,7 +219,7 @@ func BenchmarkAgent_genCPUMetrics(b *testing.B) {
 		cpuMetrics []CPUMetric
 	}
 
-	lg, err := logging.MustZapLogger(zap.DebugLevel)
+	lg, err := logging.MustZapLogger(&config.Config{LogLevel: 1})
 	assert.NoError(b, err)
 	cfg := config.Config{}
 

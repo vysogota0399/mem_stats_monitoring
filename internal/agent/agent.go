@@ -83,7 +83,10 @@ func (a *Agent) startPoller(ctx context.Context, wg *sync.WaitGroup) {
 	wg.Add(1)
 
 	go func() {
-		defer wg.Done()
+		defer func() {
+			wg.Done()
+			a.lg.InfoCtx(ctx, "poller pipe done")
+		}()
 
 		pollerCtx := a.lg.WithContextFields(ctx, zap.String("actor", "poller"))
 		for {
@@ -92,12 +95,10 @@ func (a *Agent) startPoller(ctx context.Context, wg *sync.WaitGroup) {
 				a.lg.InfoCtx(pollerCtx, "poller done with context cancellation")
 				return
 			default:
-				a.lg.InfoCtx(pollerCtx, "poller start")
 				if err := a.runPollerPipe(pollerCtx); err != nil {
 					a.lg.ErrorCtx(pollerCtx, "error in poller pipe", zap.Error(err))
 				}
 
-				a.lg.DebugCtx(pollerCtx, "sleep", zap.Duration("dur", a.cfg.PollInterval))
 				time.Sleep(a.cfg.PollInterval)
 			}
 		}
@@ -109,7 +110,10 @@ func (a Agent) startReporter(ctx context.Context, wg *sync.WaitGroup) {
 	wg.Add(1)
 
 	go func() {
-		defer wg.Done()
+		defer func() {
+			wg.Done()
+			a.lg.InfoCtx(ctx, "reporter done")
+		}()
 
 		reporterCtx := a.lg.WithContextFields(ctx, zap.String("actor", "reporter"))
 		for {
@@ -118,7 +122,7 @@ func (a Agent) startReporter(ctx context.Context, wg *sync.WaitGroup) {
 				a.lg.InfoCtx(reporterCtx, "reporter done with context cancellation")
 				return
 			case <-time.NewTicker(a.cfg.ReportInterval).C:
-				a.lg.InfoCtx(reporterCtx, "reporter start")
+				a.lg.DebugCtx(reporterCtx, "reporter start")
 				a.runReporterPipe(reporterCtx)
 				a.lg.DebugCtx(reporterCtx, "sleep", zap.Duration("dur", a.cfg.ReportInterval))
 			}

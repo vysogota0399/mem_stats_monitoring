@@ -9,14 +9,16 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
+
+	"github.com/vysogota0399/mem_stats_monitoring/internal/server/config"
 )
 
 type Decryptor struct {
 	privateKey io.Reader
 }
 
-func NewDecryptor(pk io.Reader) *Decryptor {
-	return &Decryptor{privateKey: pk}
+func NewDecryptor(cfg *config.Config) *Decryptor {
+	return &Decryptor{privateKey: cfg.PrivateKey}
 }
 
 func (d *Decryptor) Decrypt(ciphertext string) (string, error) {

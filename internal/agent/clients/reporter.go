@@ -53,7 +53,7 @@ func NewReporter(address string, lg *logging.ZapLogger, client Requester) *Repor
 		address:     address,
 		client:      client,
 		lg:          lg,
-		maxAttempts: 5,
+		maxAttempts: 2,
 	}
 }
 
@@ -85,7 +85,7 @@ type Encryptor interface {
 
 // NewCompReporter creates a new Reporter instance with compression and rate limiting
 func NewCompReporter(address string, lg *logging.ZapLogger, cfg *config.Config, client Requester) *Reporter {
-	return &Reporter{
+	reporter := &Reporter{
 		address:       address,
 		client:        client,
 		lg:            lg,
@@ -94,8 +94,13 @@ func NewCompReporter(address string, lg *logging.ZapLogger, cfg *config.Config, 
 		secretKey:     []byte(cfg.Key),
 		semaphore:     NewSemaphore(cfg.RateLimit),
 		publicKeyPath: cfg.HTTPCert,
-		encryptor:     crypto.NewEncryptor(cfg.HTTPCert),
 	}
+
+	if cfg.HTTPCert != nil {
+		reporter.encryptor = crypto.NewEncryptor(cfg.HTTPCert)
+	}
+
+	return reporter
 }
 
 // UpdateMetric sends a single metric update to the server
@@ -142,10 +147,10 @@ func (c *Reporter) UpdateMetrics(ctx context.Context, data []*models.Metric) err
 	for _, m := range data {
 		rec, err := generateMetric(m.Type, m.Name, m.Value)
 		if err != nil {
-			return err
+			return fmt.Errorf("internal/agent/clients/reporter: generate metric %+v error %w", m, err)
 		}
 
-		metricsBody = append(metricsBody, *rec)
+		metricsBody = append(metricsBody, rec)
 	}
 
 	var body bytes.Buffer
@@ -182,15 +187,15 @@ func (c *Reporter) UpdateMetrics(ctx context.Context, data []*models.Metric) err
 	return nil
 }
 
-func generateMetric(mType, mName, mValue string) (*MetricsBody, error) {
-	rec := &MetricsBody{MName: mName, MType: mType}
+func generateMetric(mType, mName, mValue string) (MetricsBody, error) {
+	rec := MetricsBody{MName: mName, MType: mType}
 	switch mType {
 	case models.GaugeType:
 		rec.Value = mValue
 	case models.CounterType:
 		rec.Delta = mValue
 	default:
-		return nil, fmt.Errorf("internal/agent/clients/reporter.go: underfined type: %s, for name: %s, value: %s", mType, mName, mValue)
+		return MetricsBody{}, fmt.Errorf("internal/agent/clients/reporter.go: underfined type: %s, for name: %s, value: %s", mType, mName, mValue)
 	}
 
 	return rec, nil
@@ -204,7 +209,6 @@ func (c *Reporter) requestDo(ctx context.Context, req *http.Request) (*http.Resp
 	resCh := make(chan *http.Response, c.maxAttempts)
 	errCh := make(chan error)
 	defer close(resCh)
-	defer close(errCh)
 
 	doRequest := func(ctx context.Context, req *http.Request, resChan chan *http.Response, errChan chan error) {
 		c.semaphore.Acquire()
@@ -213,33 +217,49 @@ func (c *Reporter) requestDo(ctx context.Context, req *http.Request) (*http.Resp
 		start := time.Now()
 		reader, readerErr := req.GetBody()
 		if readerErr != nil {
-			errChan <- fmt.Errorf("internal/agent/clients/reporter get body reader error %w", readerErr)
+			if ctx.Err() == nil {
+				errChan <- fmt.Errorf("internal/agent/clients/reporter get body reader error %w", readerErr)
+			}
+
 			return
 		}
 
 		buff := bytes.Buffer{}
 		if _, copyErr := io.Copy(&buff, reader); copyErr != nil {
-			errChan <- fmt.Errorf("internal/agent/clients/reporter read body error %w", copyErr)
+			if ctx.Err() == nil {
+				errChan <- fmt.Errorf("internal/agent/clients/reporter read body error %w", copyErr)
+			}
+
 			return
 		}
 
 		ctx = context.WithValue(ctx, bKey, buff.Bytes())
 
 		if signErr := c.signRequest(ctx, req); signErr != nil {
-			errChan <- fmt.Errorf("internal/agent/clients/reporter sign request error %w", signErr)
+			if ctx.Err() == nil {
+				errChan <- fmt.Errorf("internal/agent/clients/reporter sign request error %w", signErr)
+			}
+
 			return
 		}
 
 		if encErr := c.encryptRequest(ctx, req); encErr != nil {
-			errChan <- fmt.Errorf("internal/agent/clients/reporter encrypt request error %w", encErr)
+			if ctx.Err() == nil {
+				errChan <- fmt.Errorf("internal/agent/clients/reporter encrypt request error %w", encErr)
+			}
+
 			return
 		}
 
 		resp, reqErr := c.client.Request(req)
 		if reqErr != nil {
-			errChan <- fmt.Errorf("internal/agent/clients/reporter send request error %w", reqErr)
+			if ctx.Err() == nil {
+				errChan <- fmt.Errorf("internal/agent/clients/reporter send request error %w", reqErr)
+			}
+
 			return
 		}
+
 		defer func() {
 			if err := resp.Body.Close(); err != nil {
 				c.lg.ErrorCtx(ctx, "failed to close response body", zap.Error(err))
@@ -256,12 +276,14 @@ func (c *Reporter) requestDo(ctx context.Context, req *http.Request) (*http.Resp
 			zap.Any("headers", req.Header),
 		)
 
-		resChan <- resp
+		if ctx.Err() == nil {
+			resChan <- resp
+		}
 	}
 
 	var err error
 
-	for i := uint8(0); i < c.maxAttempts; i++ {
+	for i := range c.maxAttempts {
 		go doRequest(ctx, req, resCh, errCh)
 
 		select {
@@ -342,14 +364,8 @@ type MetricsBodyAlias struct {
 }
 
 func (m MetricsBody) MarshalJSON() ([]byte, error) {
-	aliasValue := struct {
-		MetricsBodyAlias
-		Delta int     `json:"delta,omitempty"` // metric value for counter type
-		Value float64 `json:"value,omitempty"` // metric value for gauge type
-	}{
-		MetricsBodyAlias: MetricsBodyAlias{
-			MetricsBody: m,
-		},
+	aliasValue := MetricsBodyAlias{
+		MetricsBody: m,
 	}
 
 	if m.Value != "" {

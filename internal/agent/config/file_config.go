@@ -5,44 +5,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"time"
-
-	"go.uber.org/zap"
 )
 
 type FileConfig struct {
-	source         io.Reader
 	ServerURL      string `json:"address"`
 	ReportInterval int64  `json:"report_interval"`
 	PollInterval   int64  `json:"poll_interval"`
 	HTTPCert       string `json:"crypto_key"`
 }
 
-func NewFromFile(path string) (*FileConfig, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, fmt.Errorf("config: failed to open file: %w", err)
-	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			zap.L().Error("config: failed to close file: %w", zap.Error(err))
-		}
-	}()
-
-	return &FileConfig{
-		source: file,
-	}, nil
+func NewFileConfig() *FileConfig {
+	return &FileConfig{}
 }
 
-func NewFromReader(r io.Reader) (*FileConfig, error) {
-	return &FileConfig{
-		source: r,
-	}, nil
-}
-
-func (f *FileConfig) Configure(c *Config) error {
-	buffer := bufio.NewReader(f.source)
+func (f *FileConfig) Configure(c *Config, source io.Reader) error {
+	buffer := bufio.NewReader(source)
 
 	if err := json.NewDecoder(buffer).Decode(f); err != nil {
 		return fmt.Errorf("config: failed to decode file: %w", err)

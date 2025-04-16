@@ -92,14 +92,13 @@ func TestFileConfig_Configure(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			f := &FileConfig{
-				source:          tt.fields.source,
 				Address:         tt.fields.Address,
 				StoreInterval:   tt.fields.StoreInterval,
 				FileStoragePath: tt.fields.FileStoragePath,
 				DatabaseDSN:     tt.fields.DatabaseDSN,
 				PrivateKey:      tt.fields.PrivateKey,
 			}
-			if err := f.Configure(tt.args.c); (err != nil) != tt.wantErr {
+			if err := f.Configure(tt.args.c, tt.fields.source); (err != nil) != tt.wantErr {
 				t.Errorf("FileConfig.Configure() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})

@@ -13,13 +13,12 @@ import (
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/storage"
 	mocks "github.com/vysogota0399/mem_stats_monitoring/internal/mocks/agent"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
-	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
 // TestNewAgent проверяет создание нового агента.
 func TestNewAgent(t *testing.T) {
-	logger, err := logging.MustZapLogger(-1)
+	logger, err := logging.MustZapLogger(&config.Config{LogLevel: 0})
 	assert.NoError(t, err)
 	store := storage.NewMemoryStorage(logger)
 	cfg, err := config.NewConfig(nil)
@@ -36,7 +35,7 @@ func TestNewAgent(t *testing.T) {
 func TestRunPollerPipe(t *testing.T) {
 	t.Parallel()
 
-	logger, err := logging.MustZapLogger(-1)
+	logger, err := logging.MustZapLogger(&config.Config{LogLevel: 0})
 	require.NoError(t, err)
 
 	store := storage.NewMemoryStorage(logger)
@@ -58,7 +57,7 @@ func TestRunPollerPipe(t *testing.T) {
 func TestGenMetrics(t *testing.T) {
 	t.Parallel()
 
-	logger, err := logging.MustZapLogger(-1)
+	logger, err := logging.MustZapLogger(&config.Config{LogLevel: 0})
 	assert.NoError(t, err)
 
 	store := storage.NewMemoryStorage(logger)
@@ -91,7 +90,7 @@ func TestGenMetrics(t *testing.T) {
 func TestSaveMetrics(t *testing.T) {
 	t.Parallel()
 
-	logger, err := logging.MustZapLogger(-1)
+	logger, err := logging.MustZapLogger(&config.Config{LogLevel: 0})
 	require.NoError(t, err)
 
 	store := storage.NewMemoryStorage(logger)
@@ -196,7 +195,7 @@ func TestAgent_Start(t *testing.T) {
 			}
 
 			mockClient := mocks.NewMockHttpClient(ctrl)
-			lg, err := logging.MustZapLogger(zap.DebugLevel)
+			lg, err := logging.MustZapLogger(&config.Config{LogLevel: 0})
 			assert.NoError(t, err)
 
 			agent := &Agent{

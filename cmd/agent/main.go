@@ -9,7 +9,6 @@ import (
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/storage"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 var (
@@ -19,12 +18,12 @@ var (
 )
 
 func main() {
-	cfg, err := config.NewConfig(nil)
+	cfg, err := config.NewConfig(config.NewFileConfig())
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	lg, err := logging.MustZapLogger(zapcore.Level(cfg.LogLevel))
+	lg, err := logging.MustZapLogger(&cfg)
 	if err != nil {
 		log.Fatal(err)
 	}
