@@ -1,134 +1,186 @@
 package handlers
 
 import (
-	"bytes"
-	"context"
 	"errors"
-	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
-	"github.com/vysogota0399/mem_stats_monitoring/internal/server/models"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/models"
+	mock "github.com/vysogota0399/mem_stats_monitoring/internal/mocks/server/service"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/server"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/server/config"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/service"
-	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
-	"go.uber.org/zap/zapcore"
 )
 
-type succededSerice struct{}
-type failureSerice struct{}
-
-var expectedValue float64 = 1
-
-func (s succededSerice) Call(ctx context.Context, p service.UpdateMetricServiceParams) (service.UpdateMetricServiceResult, error) {
-	return service.UpdateMetricServiceResult{Value: &expectedValue, MType: models.GaugeType, ID: "test"}, nil
-}
-
-func (s failureSerice) Call(ctx context.Context, p service.UpdateMetricServiceParams) (service.UpdateMetricServiceResult, error) {
-	return service.UpdateMetricServiceResult{}, errors.New("error")
-}
-
-func Test_updateRestMetricHandlerFunc(t *testing.T) {
-	var expectedRoute = "/update/"
-
+func TestNewRestUpdateMetricHandler(t *testing.T) {
 	type args struct {
-		service UpdateMetricService
-		payload []byte
-	}
-	type want struct {
-		status  int
-		payload []byte
-		ctype   string
+		service *mock.MockIUpdateRestMetricService
 	}
 	tests := []struct {
 		name string
 		args args
-		want want
 	}{
 		{
-			name: "when valid payload and service returns no errors",
-			args: args{
-				service: succededSerice{},
-				payload: []byte(`{"id": "test", "type": "gauge", "value": 1}`),
+			name: "creates instance of UpdateRestMetricHandler",
+			args: args{},
+		},
+	}
+	lg, err := logging.NewZapLogger(&config.Config{LogLevel: -1})
+	assert.NoError(t, err)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.args.service = mock.NewMockIUpdateRestMetricService(ctrl)
+			h := NewUpdateRestMetricHandler(tt.args.service, lg)
+			assert.NotNil(t, h)
+			assert.Equal(t, tt.args.service, h.service)
+			assert.Equal(t, lg, h.lg)
+		})
+	}
+}
+
+func TestUpdateRestMetricHandler_Registrate(t *testing.T) {
+	type fields struct {
+		service IUpdateRestMetricService
+		lg      *logging.ZapLogger
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   server.Route
+	}{
+		{
+			name: "when service is provided",
+			fields: fields{
+				service: mock.NewMockIUpdateRestMetricService(nil),
+				lg:      nil,
 			},
-			want: want{
-				status:  200,
-				payload: []byte(fmt.Sprintf(`{"id": "test", "type": "gauge", "value": %v}`, expectedValue)),
-				ctype:   "application/json",
+			want: server.Route{
+				Path:   "/update/",
+				Method: "POST",
 			},
 		},
 		{
-			name: "when invalid payload",
-			args: args{
-				service: succededSerice{},
-				payload: []byte(`{"id": "test"}`),
+			name: "when service is nil",
+			fields: fields{
+				service: nil,
+				lg:      nil,
 			},
-			want: want{
-				status:  400,
-				payload: []byte(`{}`),
-				ctype:   "application/json",
-			},
-		},
-		{
-			name: "when valid payload and service failed",
-			args: args{
-				service: failureSerice{},
-				payload: []byte(`{"id": "test"}`),
-			},
-			want: want{
-				status:  400,
-				payload: []byte(`{}`),
-				ctype:   "application/json",
+			want: server.Route{
+				Path:   "/update/",
+				Method: "POST",
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			router := gin.Default()
-			s := storage.NewMemory()
-			lg, err := logging.MustZapLogger(zapcore.DebugLevel)
+			h := &UpdateRestMetricHandler{
+				service: tt.fields.service,
+				lg:      tt.fields.lg,
+			}
+			got, err := h.Registrate()
 			assert.NoError(t, err)
+			assert.Equal(t, tt.want.Path, got.Path)
+			assert.Equal(t, tt.want.Method, got.Method)
+			assert.NotNil(t, got.Handler)
+		})
+	}
+}
 
-			handler := updateRestMetricHandlerFunc(
-				&UpdateRestMetricHandler{
-					storage: s,
-					service: tt.args.service,
-					lg:      lg,
-				},
-			)
+func TestUpdateRestMetricHandler_handler(t *testing.T) {
+	type fields struct {
+		srv  *mock.MockIUpdateRestMetricService
+		body io.Reader
+	}
+	tests := []struct {
+		name           string
+		fields         fields
+		prepare        func(*fields)
+		wantStatusCode int
+	}{
+		{
+			name:           "when invalid json",
+			fields:         fields{body: strings.NewReader(`{"id":}`)},
+			wantStatusCode: http.StatusBadRequest,
+			prepare:        func(fields *fields) {},
+		},
+		{
+			name:           "when missing required fields",
+			fields:         fields{body: strings.NewReader(`{"id": "test"}`)},
+			wantStatusCode: http.StatusBadRequest,
+			prepare:        func(fields *fields) {},
+		},
+		{
+			name:   "when gauge update success",
+			fields: fields{body: strings.NewReader(`{"id": "test", "type": "gauge", "value": 1.5}`)},
+			prepare: func(fields *fields) {
+				fields.srv.EXPECT().Call(gomock.Any(), gomock.Any()).Return(service.UpdateMetricServiceResult{
+					ID:    "test",
+					MType: models.GaugeType,
+					Value: 1.5,
+				}, nil)
+			},
+			wantStatusCode: http.StatusOK,
+		},
+		{
+			name:   "when counter update success",
+			fields: fields{body: strings.NewReader(`{"id": "test", "type": "counter", "delta": 1}`)},
+			prepare: func(fields *fields) {
+				fields.srv.EXPECT().Call(gomock.Any(), gomock.Any()).Return(service.UpdateMetricServiceResult{
+					ID:    "test",
+					MType: models.CounterType,
+					Delta: 1,
+				}, nil)
+			},
+			wantStatusCode: http.StatusOK,
+		},
+		{
+			name:   "when service error",
+			fields: fields{body: strings.NewReader(`{"id": "test", "type": "gauge", "value": 1.5}`)},
+			prepare: func(fields *fields) {
+				fields.srv.EXPECT().Call(gomock.Any(), gomock.Any()).Return(service.UpdateMetricServiceResult{}, errors.New("service error"))
+			},
+			wantStatusCode: http.StatusBadRequest,
+		},
+	}
 
-			router.POST(expectedRoute, handler)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-			r, err := http.NewRequestWithContext(
-				context.TODO(),
-				http.MethodPost,
-				expectedRoute,
-				bytes.NewBuffer(tt.args.payload),
-			)
+	lg, err := logging.NewZapLogger(&config.Config{LogLevel: -1})
+	assert.NoError(t, err)
 
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.fields.srv = mock.NewMockIUpdateRestMetricService(ctrl)
+			tt.prepare(&tt.fields)
+
+			h := NewUpdateRestMetricHandler(tt.fields.srv, lg)
+
+			r := gin.Default()
+			route, err := h.Registrate()
 			assert.NoError(t, err)
+			r.POST(route.Path, route.Handler)
 
-			w := httptest.NewRecorder()
-			router.ServeHTTP(w, r)
-			defer func() {
-				if err = r.Body.Close(); err != nil {
-					t.Errorf("failed to close request body: %v", err)
-				}
-			}()
+			srv := httptest.NewServer(r)
+			defer srv.Close()
 
-			result := w.Result()
-			defer func() {
-				if err = result.Body.Close(); err != nil {
-					t.Errorf("failed to close response body: %v", err)
-				}
-			}()
+			req, err := http.NewRequest(http.MethodPost, srv.URL+route.Path, tt.fields.body)
+			assert.NoError(t, err)
+			req.Header.Set("Content-Type", "application/json")
 
-			assert.Equal(t, tt.want.status, result.StatusCode)
-			assert.JSONEq(t, string(tt.want.payload), w.Body.String())
-			assert.Equal(t, tt.want.ctype, w.Header().Get("Content-Type"))
+			resp, err := srv.Client().Do(req)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.wantStatusCode, resp.StatusCode)
 		})
 	}
 }

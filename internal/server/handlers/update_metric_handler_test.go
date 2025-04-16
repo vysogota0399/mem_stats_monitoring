@@ -1,144 +1,203 @@
 package handlers
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
-	"github.com/vysogota0399/mem_stats_monitoring/internal/server/models"
-	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/models"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/mocks/server/repositories"
+	mock "github.com/vysogota0399/mem_stats_monitoring/internal/mocks/server/service"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/server"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/server/config"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/server/service"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
 )
 
 func TestNewUpdateMetricHandler(t *testing.T) {
-	type want struct {
-		statusCode int
+	type args struct {
+		service *repositories.MockICounterRepository
 	}
-
-	tasks := []struct {
-		name           string
-		url            string
-		method         string
-		headers        map[string]string
-		want           want
-		metricsUpdater metricsUpdater
+	tests := []struct {
+		name string
+		args args
 	}{
 		{
-			name:           "when valid request got response status ok",
-			url:            "/update/gauge/TotalAlloc/0",
-			method:         http.MethodPost,
-			headers:        map[string]string{"Content-Type": "text/plain"},
-			metricsUpdater: func(ctx context.Context, m Metric, storage storage.Storage, lg *logging.ZapLogger) error { return nil },
-			want:           want{statusCode: http.StatusOK},
-		},
-		{
-			name:           "when invalid method response got status not found",
-			url:            "/update/gauge/TotalAlloc/0",
-			method:         http.MethodGet,
-			headers:        map[string]string{"Content-Type": "text/plain"},
-			metricsUpdater: func(ctx context.Context, m Metric, storage storage.Storage, lg *logging.ZapLogger) error { return nil },
-			want:           want{statusCode: http.StatusNotFound},
-		},
-		{
-			name:           "when invalid url response got status not found",
-			url:            "/update/0",
-			method:         http.MethodGet,
-			headers:        map[string]string{"Content-Type": "text/plain"},
-			metricsUpdater: func(ctx context.Context, m Metric, storage storage.Storage, lg *logging.ZapLogger) error { return nil },
-			want:           want{statusCode: http.StatusNotFound},
-		},
-		{
-			name:    "when invalid params response got status bad request",
-			url:     "/update/hist/TotalAlloc/0",
-			method:  http.MethodPost,
-			headers: map[string]string{"Content-Type": "text/plain"},
-			metricsUpdater: func(ctx context.Context, m Metric, storage storage.Storage, lg *logging.ZapLogger) error {
-				return errors.New("error")
-			},
-			want: want{statusCode: http.StatusBadRequest},
+			name: "creates instance of UpdateMetricHandler",
+			args: args{},
 		},
 	}
+	lg, err := logging.NewZapLogger(&config.Config{LogLevel: -1})
+	assert.NoError(t, err)
 
-	for _, tt := range tasks {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			router := gin.Default()
-			handler := updateMetricHandlerFunc(
-				&UpdateMetricHandler{
-					storage:        storage.New(),
-					metricsUpdater: tt.metricsUpdater,
-				},
+			tt.args.service = repositories.NewMockICounterRepository(ctrl)
+
+			service := service.NewUpdateMetricService(
+				tt.args.service,
+				repositories.NewMockIGaugeRepository(ctrl),
 			)
-			router.POST("/update/:type/:name/:value", handler)
-
-			r, err := http.NewRequestWithContext(context.TODO(), tt.method, tt.url, nil)
-			w := httptest.NewRecorder()
-			if err != nil {
-				t.Error(err)
-			}
-
-			for key, value := range tt.headers {
-				r.Header.Add(key, value)
-			}
-
-			router.ServeHTTP(w, r)
-			response := w.Result()
-			assert.Equal(t, tt.want.statusCode, response.StatusCode, "%s %s \n%v", tt.method, tt.url, tt.headers)
-			if err := response.Body.Close(); err != nil {
-				t.Errorf("failed to close response body: %v", err)
-			}
+			h := NewUpdateMetricHandler(service, lg)
+			assert.NotNil(t, h)
+			assert.Equal(t, service, h.service)
+			assert.Equal(t, lg, h.lg)
 		})
 	}
 }
 
-func Test_updateMetrics(t *testing.T) {
-	type args struct {
-		ctx  context.Context
-		m    Metric
-		strg storage.Storage
+func TestUpdateMetricHandler_Registrate(t *testing.T) {
+	type fields struct {
+		service IUpdateMetricService
+		lg      *logging.ZapLogger
 	}
 	tests := []struct {
-		name    string
-		args    args
-		wantErr bool
+		name   string
+		fields fields
+		want   server.Route
 	}{
 		{
-			name: "returns failure when invalid type",
-			args: args{
-				ctx:  context.Background(),
-				m:    Metric{Type: "invalid"},
-				strg: storage.NewMemory(),
+			name: "when service is provided",
+			fields: fields{
+				service: service.NewUpdateMetricService(
+					repositories.NewMockICounterRepository(nil),
+					repositories.NewMockIGaugeRepository(nil),
+				),
+				lg: nil,
 			},
-			wantErr: true,
+			want: server.Route{
+				Path:   "/update/:type/:name/:value",
+				Method: "POST",
+			},
 		},
 		{
-			name: "when gauge - no errors",
-			args: args{
-				ctx:  context.Background(),
-				m:    Metric{Type: models.GaugeType},
-				strg: storage.NewMemory(),
+			name: "when service is nil",
+			fields: fields{
+				service: nil,
+				lg:      nil,
 			},
-			wantErr: true,
-		},
-		{
-			name: "when counter - no errors",
-			args: args{
-				ctx:  context.Background(),
-				m:    Metric{Type: models.CounterType},
-				strg: storage.NewMemory(),
+			want: server.Route{
+				Path:   "/update/:type/:name/:value",
+				Method: "POST",
 			},
-			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			lg, err := logging.MustZapLogger(-1)
+			h := &UpdateMetricHandler{
+				service: tt.fields.service,
+				lg:      tt.fields.lg,
+			}
+			got, err := h.Registrate()
 			assert.NoError(t, err)
-			err = updateMetrics(tt.args.ctx, tt.args.m, tt.args.strg, lg)
-			assert.Equal(t, tt.wantErr, err != nil)
+			assert.Equal(t, tt.want.Path, got.Path)
+			assert.Equal(t, tt.want.Method, got.Method)
+			assert.NotNil(t, got.Handler)
+		})
+	}
+}
+
+func TestUpdateMetricHandler_handler(t *testing.T) {
+	type fields struct {
+		srv   *mock.MockIUpdateMetricService
+		route string
+	}
+	tests := []struct {
+		name           string
+		fields         fields
+		prepare        func(*fields)
+		wantStatusCode int
+	}{
+		{
+			name:           "when invalid metric type",
+			fields:         fields{route: "/update/invalid/test/1"},
+			wantStatusCode: http.StatusBadRequest,
+			prepare:        func(fields *fields) {},
+		},
+		{
+			name:           "when empty metric name",
+			fields:         fields{route: "/update/gauge//1"},
+			wantStatusCode: http.StatusBadRequest,
+			prepare:        func(fields *fields) {},
+		},
+		{
+			name:           "when invalid gauge value",
+			fields:         fields{route: "/update/gauge/test/invalid"},
+			wantStatusCode: http.StatusBadRequest,
+			prepare:        func(fields *fields) {},
+		},
+		{
+			name:           "when invalid counter value",
+			fields:         fields{route: "/update/counter/test/invalid"},
+			wantStatusCode: http.StatusBadRequest,
+			prepare:        func(fields *fields) {},
+		},
+		{
+			name:   "when gauge update success",
+			fields: fields{route: "/update/gauge/test/1.5"},
+			prepare: func(fields *fields) {
+				fields.srv.EXPECT().Call(gomock.Any(), gomock.Any()).Return(service.UpdateMetricServiceResult{
+					ID:    "test",
+					MType: models.GaugeType,
+					Value: 1.5,
+				}, nil)
+			},
+			wantStatusCode: http.StatusOK,
+		},
+		{
+			name:   "when counter update success",
+			fields: fields{route: "/update/counter/test/1"},
+			prepare: func(fields *fields) {
+				fields.srv.EXPECT().Call(gomock.Any(), gomock.Any()).Return(service.UpdateMetricServiceResult{
+					ID:    "test",
+					MType: models.CounterType,
+					Delta: 1,
+				}, nil)
+			},
+			wantStatusCode: http.StatusOK,
+		},
+		{
+			name:   "when service error",
+			fields: fields{route: "/update/gauge/test/1.5"},
+			prepare: func(fields *fields) {
+				fields.srv.EXPECT().Call(gomock.Any(), gomock.Any()).Return(service.UpdateMetricServiceResult{}, errors.New("service error"))
+			},
+			wantStatusCode: http.StatusBadRequest,
+		},
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	lg, err := logging.NewZapLogger(&config.Config{LogLevel: -1})
+	assert.NoError(t, err)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.fields.srv = mock.NewMockIUpdateMetricService(ctrl)
+			tt.prepare(&tt.fields)
+
+			h := NewUpdateMetricHandler(tt.fields.srv, lg)
+			route, err := h.Registrate()
+			assert.NoError(t, err)
+			r := gin.Default()
+			r.POST(route.Path, route.Handler)
+
+			srv := httptest.NewServer(r)
+			defer srv.Close()
+
+			req, err := http.NewRequest(http.MethodPost, srv.URL+tt.fields.route, nil)
+			assert.NoError(t, err)
+
+			resp, err := srv.Client().Do(req)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.wantStatusCode, resp.StatusCode)
 		})
 	}
 }

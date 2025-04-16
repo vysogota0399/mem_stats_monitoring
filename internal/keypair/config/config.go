@@ -27,6 +27,10 @@ type Config struct {
 	Ttl        time.Duration `json:"ttl" env:"TTL"`
 }
 
+func (c *Config) LLevel() zapcore.Level {
+	return c.LogLevel
+}
+
 func NewConfig() (*Config, error) {
 	cfg := &Config{
 		LogLevel: zapcore.Level(DefaultLogLevel),

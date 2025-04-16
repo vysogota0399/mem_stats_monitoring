@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/config"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
-	"go.uber.org/zap"
 )
 
 // ReadWriteCloserBuffer implements io.ReadCloser interface
@@ -24,7 +24,7 @@ func TestCall(t *testing.T) {
 	var lg *logging.ZapLogger
 	{
 		var err error
-		lg, err = logging.MustZapLogger(zap.DebugLevel)
+		lg, err = logging.MustZapLogger(&config.Config{LogLevel: 1})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -112,7 +112,7 @@ func TestNewMultiCheck(t *testing.T) {
 			name: "successful creation without config file",
 			args: args{
 				lg: func() *logging.ZapLogger {
-					lg, err := logging.MustZapLogger(zap.DebugLevel)
+					lg, err := logging.MustZapLogger(&config.Config{LogLevel: 1})
 					if err != nil {
 						t.Fatal(err)
 					}

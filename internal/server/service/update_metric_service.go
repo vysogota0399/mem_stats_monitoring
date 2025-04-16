@@ -8,26 +8,50 @@ import (
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/repositories"
 )
 
+type CreateCntrRep interface {
+	Create(context.Context, *models.Counter) error
+}
+
+type CreateGaugeRep interface {
+	Create(context.Context, *models.Gauge) error
+}
+
+// IUpdateMetricService interface for mocks
+type IUpdateMetricService interface {
+	Call(context.Context, UpdateMetricServiceParams) (UpdateMetricServiceResult, error)
+}
+
+var _ IUpdateMetricService = (*UpdateMetricService)(nil)
+var _ CreateCntrRep = (*repositories.CounterRepository)(nil)
+var _ CreateGaugeRep = (*repositories.GaugeRepository)(nil)
+
 // UpdateMetricService это сервис, который отвечает за логику обновления/создания одной метрики.
 type UpdateMetricService struct {
-	counterRep *repositories.Counter
-	gaugeRep   *repositories.Gauge
+	counterRep CreateCntrRep
+	gaugeRep   CreateGaugeRep
+}
+
+func NewUpdateMetricService(counterRep CreateCntrRep, gaugeRep CreateGaugeRep) *UpdateMetricService {
+	return &UpdateMetricService{
+		counterRep: counterRep,
+		gaugeRep:   gaugeRep,
+	}
 }
 
 // UpdateMetricServiceParams параметры, которые необходимо передать в метод Call, для выполнения логики сервиса UpdateMetricService.
 type UpdateMetricServiceParams struct {
 	MName string
 	MType string
-	Delta *int64
-	Value *float64
+	Delta int64
+	Value float64
 }
 
 // UpdateMetricServiceResult рузультат работы сервиса UpdateMetricService.
 type UpdateMetricServiceResult struct {
-	ID    string   `json:"id"`
-	MType string   `json:"type"`
-	Delta *int64   `json:"delta,omitempty"`
-	Value *float64 `json:"value,omitempty"`
+	ID    string  `json:"id"`
+	MType string  `json:"type"`
+	Delta int64   `json:"delta,omitempty"`
+	Value float64 `json:"value,omitempty"`
 }
 
 // Call принимает параметры и отвечает за выполнение логики сервиса UpdateMetricService.
@@ -43,49 +67,35 @@ func (s UpdateMetricService) Call(ctx context.Context, params UpdateMetricServic
 }
 
 func (s UpdateMetricService) createCounter(ctx context.Context, params UpdateMetricServiceParams) (UpdateMetricServiceResult, error) {
-	var value int64
-	if params.Delta != nil {
-		value = *params.Delta
+	cntr := models.Counter{
+		Name:  params.MName,
+		Value: params.Delta,
 	}
 
-	record, err := s.counterRep.Create(
-		ctx,
-		&models.Counter{
-			Name:  params.MName,
-			Value: value,
-		})
-
-	if err != nil {
-		return UpdateMetricServiceResult{}, err
+	if err := s.counterRep.Create(ctx, &cntr); err != nil {
+		return UpdateMetricServiceResult{}, fmt.Errorf("internal/server/service/update_metric_service.go: create counter %+v error %w", cntr, err)
 	}
 
 	return UpdateMetricServiceResult{
 		ID:    params.MName,
 		MType: params.MType,
-		Delta: &record.Value,
+		Delta: cntr.Value,
 	}, nil
 }
 
 func (s UpdateMetricService) createGauge(ctx context.Context, params UpdateMetricServiceParams) (UpdateMetricServiceResult, error) {
-	var value float64
-	if params.Value != nil {
-		value = *params.Value
+	gauge := models.Gauge{
+		Name:  params.MName,
+		Value: params.Value,
 	}
 
-	record, err := s.gaugeRep.Create(
-		ctx,
-		&models.Gauge{
-			Name:  params.MName,
-			Value: value,
-		})
-
-	if err != nil {
-		return UpdateMetricServiceResult{}, err
+	if err := s.gaugeRep.Create(ctx, &gauge); err != nil {
+		return UpdateMetricServiceResult{}, fmt.Errorf("internal/server/service/update_metric_service.go: create gauge error %w", err)
 	}
 
 	return UpdateMetricServiceResult{
 		ID:    params.MName,
 		MType: params.MType,
-		Value: &record.Value,
+		Value: gauge.Value,
 	}, nil
 }

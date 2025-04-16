@@ -115,7 +115,7 @@ tasks:
     env:
       ADDRESS: 127.0.0.1:8080
       LOG_LEVEL: -1
-      REPORT_INTERVAL: 5
+      REPORT_INTERVAL: 1
     cmds:
       - go run cmd/agent/main.go
 

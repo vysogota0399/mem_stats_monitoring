@@ -17,7 +17,6 @@ import (
 func (a *Agent) runPollerPipe(ctx context.Context) error {
 	operationID := uuid.NewV4()
 	ctx = a.lg.WithContextFields(ctx, zap.String("operation_id", operationID.String()))
-	a.lg.DebugCtx(ctx, "start")
 
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -27,7 +26,6 @@ func (a *Agent) runPollerPipe(ctx context.Context) error {
 		return fmt.Errorf("poller_pile: collect metrics failed error %w", err)
 	}
 
-	a.lg.DebugCtx(ctx, "finished")
 	return nil
 }
 

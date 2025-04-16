@@ -4,45 +4,44 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/server"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storages"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
 	"go.uber.org/zap"
 )
 
-type DBAble interface {
-	Ping() error
-}
-
 type PingHandler struct {
-	storage DBAble
-	lg      *logging.ZapLogger
-	skip    bool
+	strg storages.Storage
+	lg   *logging.ZapLogger
 }
 
-func NewPingHandler(strg storage.Storage, lg *logging.ZapLogger) gin.HandlerFunc {
-	h := &PingHandler{lg: lg}
-	s, ok := strg.(DBAble)
-	if !ok {
-		h.skip = true
-	} else {
-		h.storage = s
+func (h *PingHandler) Registrate() (server.Route, error) {
+	if _, ok := h.strg.(*storages.PG); !ok {
+		return server.Route{}, nil
 	}
-	return PingHandlerFunc(h)
+
+	return server.Route{
+		Path:    "/ping",
+		Method:  "GET",
+		Handler: h.handler(),
+	}, nil
 }
 
-func PingHandlerFunc(h *PingHandler) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		ctx := h.lg.WithContextFields(c, zap.String("name", "ping_handler"))
-		if h.skip {
-			h.lg.DebugCtx(ctx, "storage not implement database flow")
-			c.AbortWithStatus(http.StatusNotAcceptable)
-			return
-		}
+func NewPingHandler(strg storages.Storage, lg *logging.ZapLogger) *PingHandler {
+	return &PingHandler{strg: strg, lg: lg}
+}
 
-		if err := h.storage.Ping(); err != nil {
+func (h *PingHandler) handler() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx := utils.InitHandlerCtx(c, h.lg, "ping_handler")
+
+		if err := h.strg.Ping(ctx); err != nil {
 			h.lg.ErrorCtx(ctx, "ping failed", zap.Error(err))
 			c.AbortWithStatus(http.StatusInternalServerError)
 			return
 		}
+
+		c.Status(http.StatusOK)
 	}
 }

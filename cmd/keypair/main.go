@@ -16,7 +16,7 @@ func main() {
 		log.Fatalf("init config error: %s", err)
 	}
 
-	lg, err := logging.MustZapLogger(cfg.LogLevel)
+	lg, err := logging.MustZapLogger(cfg)
 	if err != nil {
 		log.Fatalf("init logger error: %s", err)
 	}

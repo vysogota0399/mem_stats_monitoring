@@ -21,7 +21,7 @@ var _ IPemEncoder = (*PemEncoder)(nil)
 
 func TestNewGenerator(t *testing.T) {
 	// Create common logger once for all test cases
-	lg, err := logging.MustZapLogger(zapcore.InfoLevel)
+	lg, err := logging.MustZapLogger(&config.Config{LogLevel: 0})
 	if err != nil {
 		t.Fatalf("failed to create logger: %v", err)
 	}
@@ -85,7 +85,7 @@ func TestNewGenerator(t *testing.T) {
 
 func TestGenerator_Call(t *testing.T) {
 	// Create common logger once for all test cases
-	lg, err := logging.MustZapLogger(zapcore.InfoLevel)
+	lg, err := logging.MustZapLogger(&config.Config{LogLevel: 0})
 	if err != nil {
 		t.Fatalf("failed to create logger: %v", err)
 	}

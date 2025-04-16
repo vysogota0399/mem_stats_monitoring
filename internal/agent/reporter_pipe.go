@@ -19,7 +19,6 @@ import (
 func (a *Agent) runReporterPipe(ctx context.Context) {
 	operationID := uuid.NewV4()
 	ctx = a.lg.WithContextFields(ctx, zap.String("operation_id", operationID.String()))
-	a.lg.InfoCtx(ctx, "start")
 
 	g, ctx := errgroup.WithContext(ctx)
 

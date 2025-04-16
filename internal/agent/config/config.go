@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 type FileConfigurer interface {
@@ -103,6 +104,10 @@ func NewConfig(f FileConfigurer) (Config, error) {
 	}
 
 	return c, nil
+}
+
+func (c *Config) LLevel() zapcore.Level {
+	return zapcore.Level(c.LogLevel)
 }
 
 func (c *Config) String() string {

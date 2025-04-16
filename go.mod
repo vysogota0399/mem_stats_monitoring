@@ -5,7 +5,6 @@ go 1.24
 require (
 	github.com/brianvoe/gofakeit/v7 v7.2.1
 	github.com/caarlos0/env v3.5.0+incompatible
-	github.com/gin-contrib/pprof v1.5.2
 	github.com/gin-gonic/gin v1.10.0
 	github.com/golang/mock v1.6.0
 	github.com/jackc/pgerrcode v0.0.0-20240316143900-6e2875d9b438
@@ -15,6 +14,7 @@ require (
 	github.com/satori/go.uuid v1.2.0
 	github.com/shirou/gopsutil/v4 v4.25.2
 	github.com/stretchr/testify v1.10.0
+	go.uber.org/fx v1.23.0
 	golang.org/x/sync v0.12.0
 	golang.org/x/tools v0.31.0
 	gopkg.in/yaml.v2 v2.4.0
@@ -38,6 +38,7 @@ require (
 	github.com/tklauser/go-sysconf v0.3.15 // indirect
 	github.com/tklauser/numcpus v0.10.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
+	go.uber.org/dig v1.18.0 // indirect
 	golang.org/x/exp/typeparams v0.0.0-20250210185358-939b2ce775ac // indirect
 	golang.org/x/mod v0.24.0 // indirect
 )

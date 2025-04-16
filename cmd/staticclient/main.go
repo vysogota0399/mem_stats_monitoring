@@ -4,11 +4,10 @@ import (
 	"context"
 	"log"
 
-	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/config"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/server/config"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/staticclient/multicheck"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 func main() {
@@ -16,7 +15,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	lg, err := logging.MustZapLogger(zapcore.Level(cfg.LogLevel))
+	lg, err := logging.MustZapLogger(cfg)
 	if err != nil {
 		log.Fatal(err)
 	}
