@@ -21,6 +21,7 @@ func TestNewStorage(t *testing.T) {
 
 	type args struct {
 		connectionOpener *storages.MockConnectionOpener
+		sourceBuilder    *storages.MockSourceBuilder
 	}
 
 	tests := []struct {
@@ -64,7 +65,9 @@ func TestNewStorage(t *testing.T) {
 			want:    &Persistance{},
 			wantErr: false,
 			args:    args{},
-			prepare: func(args *args) {},
+			prepare: func(args *args) {
+				args.sourceBuilder.EXPECT().Source(gomock.Any())
+			},
 		},
 	}
 
@@ -80,9 +83,10 @@ func TestNewStorage(t *testing.T) {
 			)
 
 			tt.args.connectionOpener = storages.NewMockConnectionOpener(cntr)
+			tt.args.sourceBuilder = storages.NewMockSourceBuilder(cntr)
 			tt.prepare(&tt.args)
 
-			got, err := NewStorage(l, nil, lg, tt.cfg, nil, tt.args.connectionOpener)
+			got, err := NewStorage(l, nil, lg, tt.cfg, nil, tt.args.connectionOpener, tt.args.sourceBuilder)
 			if tt.wantErr {
 				assert.Error(t, err)
 				assert.Nil(t, got)

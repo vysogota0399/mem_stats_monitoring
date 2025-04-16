@@ -20,8 +20,9 @@ import (
 
 func TestNewPersistance(t *testing.T) {
 	type args struct {
-		dumper   *dump.MockDumper
-		restorer *storages.MockRestorer
+		dumper     *dump.MockDumper
+		restorer   *storages.MockRestorer
+		srcBuilder *storages.MockSourceBuilder
 	}
 	tests := []struct {
 		name         string
@@ -30,12 +31,22 @@ func TestNewPersistance(t *testing.T) {
 		prepare      func(args *args)
 		wantStartErr bool
 		wantStopErr  bool
+		wantErr      bool
 	}{
+		{
+			name: "when build source failed",
+			args: args{},
+			prepare: func(args *args) {
+				args.srcBuilder.EXPECT().Source(gomock.Any()).Return(nil, errors.New("build source failed"))
+			},
+			wantErr: true,
+		},
 		{
 			name: "when start and restore failed",
 			args: args{},
 			prepare: func(args *args) {
 				args.restorer.EXPECT().Call(gomock.Any()).Return(errors.New("restore failed"))
+				args.srcBuilder.EXPECT().Source(gomock.Any()).Return(nil, nil)
 			},
 			wantStartErr: true,
 		},
@@ -45,6 +56,7 @@ func TestNewPersistance(t *testing.T) {
 			prepare: func(args *args) {
 				args.restorer.EXPECT().Call(gomock.Any()).Return(nil)
 				args.dumper.EXPECT().Start(gomock.Any())
+				args.srcBuilder.EXPECT().Source(gomock.Any()).Return(nil, nil)
 				args.dumper.EXPECT().Stop(gomock.Any())
 			},
 		},
@@ -77,9 +89,15 @@ func TestNewPersistance(t *testing.T) {
 			)
 			tt.args.dumper = dump.NewMockDumper(cntr)
 			tt.args.restorer = storages.NewMockRestorer(cntr)
+			tt.args.srcBuilder = storages.NewMockSourceBuilder(cntr)
 			tt.prepare(&tt.args)
 
-			got, err := NewPersistance(l, &config.Config{FileStoragePath: f.Name()}, tt.args.dumper, lg)
+			got, err := NewPersistance(l, &config.Config{FileStoragePath: f.Name()}, tt.args.dumper, lg, tt.args.srcBuilder)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+
 			assert.NotNil(t, got)
 			assert.NoError(t, err)
 

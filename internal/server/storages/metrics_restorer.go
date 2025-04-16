@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"os"
 	"sync/atomic"
 
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/config"
@@ -34,18 +33,23 @@ type IStorageTarget interface {
 var _ Restorer = (*MetricsRestorer)(nil)
 var _ IStorageTarget = (Storage)(nil)
 
+type SourceBuilder interface {
+	Source(cfg *config.Config) (io.ReadCloser, error)
+}
+
 func NewFileMetricsRestorer(
 	cfg *config.Config,
 	lg *logging.ZapLogger,
 	strg IStorageTarget,
+	srsb SourceBuilder,
 ) (*MetricsRestorer, error) {
 	if cfg.FileStoragePath == "" {
 		return nil, errors.New("restorer: file storage path is empty")
 	}
 
-	source, err := os.OpenFile(cfg.FileStoragePath, os.O_RDONLY|os.O_CREATE, rwfmode)
+	source, err := srsb.Source(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("restorer: failed to open file %w", err)
+		return nil, err
 	}
 
 	return &MetricsRestorer{

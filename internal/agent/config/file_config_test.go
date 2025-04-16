@@ -67,11 +67,11 @@ func TestFileConfig_Configure(t *testing.T) {
 			b, err := json.Marshal(&tt.fields)
 			assert.NoError(t, err)
 
-			buff := bytes.NewBuffer(b)
-			cfg, err := NewFromReader(buff)
-			assert.NoError(t, err)
+			cfg := NewFileConfig()
 
-			err = cfg.Configure(tt.args.c)
+			buff := bytes.NewBuffer(b)
+
+			err = cfg.Configure(tt.args.c, buff)
 			assert.NoError(t, err)
 
 			tt.assert(t, tt.args.c, &tt.fields)

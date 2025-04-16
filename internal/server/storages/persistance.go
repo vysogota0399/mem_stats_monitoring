@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"os"
 
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/config"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storages/dump"
@@ -31,13 +33,28 @@ type Restorer interface {
 	Call(ctx context.Context) error
 }
 
-func NewPersistance(lc fx.Lifecycle, cfg *config.Config, dumper Dumper, lg *logging.ZapLogger) (*Persistance, error) {
+type SourceFileFactory struct{}
+
+func NewSourceFileFactory() *SourceFileFactory {
+	return &SourceFileFactory{}
+}
+
+func (s SourceFileFactory) Source(cfg *config.Config) (io.ReadCloser, error) {
+	source, err := os.OpenFile(cfg.FileStoragePath, os.O_RDONLY|os.O_CREATE, rwfmode)
+	if err != nil {
+		return nil, fmt.Errorf("restorer: failed to open file %w", err)
+	}
+
+	return source, nil
+}
+
+func NewPersistance(lc fx.Lifecycle, cfg *config.Config, dumper Dumper, lg *logging.ZapLogger, srsb SourceBuilder) (*Persistance, error) {
 	strg := &Persistance{
 		Memory: NewMemory(lg),
 		lg:     lg,
 	}
 
-	restorer, err := NewFileMetricsRestorer(cfg, lg, strg)
+	restorer, err := NewFileMetricsRestorer(cfg, lg, strg, srsb)
 	if err != nil {
 		return nil, fmt.Errorf("persistance: failed to create restorer %w", err)
 	}

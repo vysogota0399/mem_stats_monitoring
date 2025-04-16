@@ -5,9 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
-
-	"go.uber.org/zap"
 )
 
 type FileConfig struct {
@@ -20,28 +17,6 @@ type FileConfig struct {
 
 func NewFileConfig() *FileConfig {
 	return &FileConfig{}
-}
-
-func NewFromFile(path string) (*FileConfig, error) {
-	if path == "" {
-		return nil, fmt.Errorf("config: path is empty")
-	}
-
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, fmt.Errorf("config: failed to open file: %w", err)
-	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			zap.L().Error("config: failed to close file: %w", zap.Error(err))
-		}
-	}()
-
-	return &FileConfig{}, nil
-}
-
-func NewFromReader(r io.Reader) (*FileConfig, error) {
-	return &FileConfig{}, nil
 }
 
 func (f *FileConfig) Configure(c *Config, source io.Reader) error {

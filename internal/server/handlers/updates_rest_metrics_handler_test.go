@@ -169,6 +169,7 @@ func TestUpdatesRestMetricsHandler_handler(t *testing.T) {
 			resp, err := srv.Client().Do(req)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.wantStatusCode, resp.StatusCode)
+			assert.NoError(t, resp.Body.Close())
 		})
 	}
 }

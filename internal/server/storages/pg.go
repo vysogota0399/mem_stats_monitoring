@@ -204,6 +204,10 @@ func (pg *PG) GetGauge(ctx context.Context, record *models.Gauge) error {
 		return fmt.Errorf("pg: get gauge failed error %w", err)
 	}
 
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("pg: close rows err %w", err)
+	}
+
 	return nil
 }
 
@@ -234,6 +238,10 @@ func (pg *PG) GetCounter(ctx context.Context, record *models.Counter) error {
 		}
 	}
 
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("pg: close rows err %w", err)
+	}
+
 	return nil
 }
 
@@ -262,6 +270,11 @@ func (pg *PG) GetGauges(ctx context.Context) ([]models.Gauge, error) {
 		}
 		gauges = append(gauges, g)
 	}
+
+	if err := rows.Err(); err != nil {
+		return []models.Gauge{}, fmt.Errorf("pg: close rows err %w", err)
+	}
+
 	return gauges, nil
 }
 
@@ -293,6 +306,11 @@ func (pg *PG) GetCounters(ctx context.Context) ([]models.Counter, error) {
 		}
 		counters = append(counters, c)
 	}
+
+	if err := rows.Err(); err != nil {
+		return []models.Counter{}, fmt.Errorf("pg: close rows err %w", err)
+	}
+
 	return counters, nil
 }
 

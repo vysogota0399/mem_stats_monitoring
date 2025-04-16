@@ -48,11 +48,11 @@ func (s *Memory) Set(ctx context.Context, m *models.Metric) error {
 }
 
 func (s *Memory) Get(to *models.Metric) error {
-	mType := to.Type
-	mName := to.Name
-
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+
+	mType := to.Type
+	mName := to.Name
 
 	mTypeStorage, ok := s.storage[mType]
 	if !ok {

@@ -40,6 +40,7 @@ func CreateApp() fx.Option {
 			fx.Annotate(storages.NewStorage, fx.As(new(storages.Storage))),
 			fx.Annotate(dump.NewMetricsDumper, fx.As(new(storages.Dumper))),
 			fx.Annotate(storages.NewStorage, fx.As(new(storages.IStorageTarget))),
+			fx.Annotate(storages.NewSourceFileFactory, fx.As(new(storages.SourceBuilder))),
 
 			fx.Annotate(repositories.NewCounterRepository,
 				fx.As(new(handlers.RootCounterRepository)),

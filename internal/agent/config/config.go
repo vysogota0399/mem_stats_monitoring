@@ -16,7 +16,7 @@ import (
 )
 
 type FileConfigurer interface {
-	Configure(c *Config) error
+	Configure(c *Config, source io.Reader) error
 }
 
 type Config struct {
@@ -29,6 +29,7 @@ type Config struct {
 	ProfileAddress string        `json:"profile_address" env:"PROFILE_ADDRESS"`
 	MaxAttempts    uint8         `json:"max_attempts" env:"MAX_ATTEMPTS" envDefault:"5"`
 	HTTPCert       io.Reader     `json:"crypto_key" env:"CRYPTO_KEY"`
+	ConfigPath     string        `json:"config_path" env:"CONFIG" envDefault:""`
 }
 
 func NewConfig(f FileConfigurer) (Config, error) {
@@ -67,6 +68,10 @@ func NewConfig(f FileConfigurer) (Config, error) {
 		c.Key = key
 	}
 
+	if configPaht, ok := os.LookupEnv("CONFIG"); ok {
+		c.ConfigPath = configPaht
+	}
+
 	if val, ok := os.LookupEnv("RATE_LIMIT"); ok {
 		rLimit, err := strconv.ParseInt(val, 10, 8)
 		if err != nil {
@@ -95,12 +100,8 @@ func NewConfig(f FileConfigurer) (Config, error) {
 
 	c.ServerURL = fmt.Sprintf("http://%s", c.ServerURL)
 
-	if f == nil {
-		return c, nil
-	}
-
-	if err := f.Configure(&c); err != nil {
-		return Config{}, fmt.Errorf("config: failed to configure from file: %w", err)
+	if err := fromFile(&c, f); err != nil {
+		return Config{}, err
 	}
 
 	return c, nil
@@ -156,6 +157,10 @@ func (c *Config) parseFlags() error {
 		c.HTTPCert = cert
 	}
 
+	if flag.Lookup("c") == nil {
+		flag.StringVar(&c.ConfigPath, "c", "", "file to config.json")
+	}
+
 	flag.Parse()
 
 	c.PollInterval = time.Duration(pollInterval) * time.Second
@@ -186,4 +191,26 @@ func prepareCert(val string) (io.Reader, error) {
 	}
 
 	return cert, nil
+}
+
+func fromFile(cfg *Config, fc FileConfigurer) error {
+	if cfg.ConfigPath == "" {
+		return nil
+	}
+
+	file, err := os.Open(cfg.ConfigPath)
+	if err != nil {
+		return fmt.Errorf("config: failed to open file %w", err)
+	}
+	defer func() {
+		if err := file.Close(); err != nil {
+			zap.L().Error("config: failed to close file", zap.Error(err))
+		}
+	}()
+
+	if err := fc.Configure(cfg, file); err != nil {
+		return fmt.Errorf("config: failed to configure from file: %w", err)
+	}
+
+	return nil
 }

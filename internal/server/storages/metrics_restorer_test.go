@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"os"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -17,8 +16,9 @@ import (
 
 func TestNewFileMetricsRestorer(t *testing.T) {
 	type args struct {
-		cfg     *config.Config
-		prepare func(cfg *config.Config) (*os.File, error)
+		cfg        *config.Config
+		srcBuilder *storages.MockSourceBuilder
+		prepare    func(a *args)
 	}
 	tests := []struct {
 		name    string
@@ -28,65 +28,53 @@ func TestNewFileMetricsRestorer(t *testing.T) {
 		{
 			name: "when file storage path is empty",
 			args: args{
-				cfg: &config.Config{FileStoragePath: ""},
-				prepare: func(cfg *config.Config) (*os.File, error) {
-					return nil, nil
+				cfg: &config.Config{},
+				prepare: func(a *args) {
 				},
 			},
 			wantErr: true,
 		},
 		{
-			name: "when file found",
+			name: "when file storage path found",
 			args: args{
-				cfg: &config.Config{},
-				prepare: func(cfg *config.Config) (*os.File, error) {
-					f, err := os.CreateTemp("", "dump.json")
-					if err != nil {
-						return nil, err
-					}
-
-					cfg.FileStoragePath = f.Name()
-					return f, nil
+				cfg: &config.Config{FileStoragePath: "source"},
+				prepare: func(a *args) {
+					a.srcBuilder.EXPECT().Source(gomock.Any()).Return(&ReadCloserTarget{}, nil)
 				},
 			},
 			wantErr: false,
 		},
 	}
 
+	cntr := gomock.NewController(t)
+	defer cntr.Finish()
+
 	lg, err := logging.MustZapLogger(&config.Config{LogLevel: -1})
 	assert.NoError(t, err)
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			f, err := tt.args.prepare(tt.args.cfg)
 			assert.NoError(t, err)
 
-			got, err := NewFileMetricsRestorer(tt.args.cfg, lg, nil)
+			tt.args.srcBuilder = storages.NewMockSourceBuilder(cntr)
+			tt.args.prepare(&tt.args)
+
+			got, err := NewFileMetricsRestorer(tt.args.cfg, lg, nil, tt.args.srcBuilder) // TODO: implement me!!!!!!
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
 				assert.NotNil(t, got)
 			}
-
-			if f != nil {
-				if err := f.Close(); err != nil {
-					t.Error(err)
-				}
-
-				if err := os.Remove(f.Name()); err != nil {
-					t.Error(err)
-				}
-			}
 		})
 	}
 }
 
-type WriteCloserTarget struct {
+type ReadCloserTarget struct {
 	*bytes.Buffer
 }
 
-func (w *WriteCloserTarget) Close() error {
+func (w *ReadCloserTarget) Close() error {
 	return nil
 }
 
@@ -107,7 +95,7 @@ func TestMetricsRestorer_Call(t *testing.T) {
 		{
 			name: "when empty file",
 			fields: fields{
-				source: &WriteCloserTarget{Buffer: &bytes.Buffer{}},
+				source: &ReadCloserTarget{Buffer: &bytes.Buffer{}},
 			},
 			args: args{
 				prepare: func(fields *fields) {},
@@ -117,7 +105,7 @@ func TestMetricsRestorer_Call(t *testing.T) {
 		{
 			name: "when file is not valid",
 			fields: fields{
-				source: &WriteCloserTarget{Buffer: bytes.NewBufferString("invalid\n")},
+				source: &ReadCloserTarget{Buffer: bytes.NewBufferString("invalid\n")},
 			},
 			args: args{
 				prepare: func(fields *fields) {},
@@ -127,7 +115,7 @@ func TestMetricsRestorer_Call(t *testing.T) {
 		{
 			name: "when save record to storage failed",
 			fields: fields{
-				source: &WriteCloserTarget{Buffer: bytes.NewBufferString("{\"type\":\"counter\",\"name\":\"test\",\"value\":1}\n")},
+				source: &ReadCloserTarget{Buffer: bytes.NewBufferString("{\"type\":\"counter\",\"name\":\"test\",\"value\":1}\n")},
 			},
 			args: args{
 				prepare: func(fields *fields) {
@@ -139,7 +127,7 @@ func TestMetricsRestorer_Call(t *testing.T) {
 		{
 			name: "when success",
 			fields: fields{
-				source: &WriteCloserTarget{Buffer: bytes.NewBufferString("{\"type\":\"counter\",\"name\":\"test\",\"value\":1}\n")},
+				source: &ReadCloserTarget{Buffer: bytes.NewBufferString("{\"type\":\"counter\",\"name\":\"test\",\"value\":1}\n")},
 			},
 			args: args{
 				prepare: func(fields *fields) {

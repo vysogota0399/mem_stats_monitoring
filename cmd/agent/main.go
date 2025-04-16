@@ -18,7 +18,7 @@ var (
 )
 
 func main() {
-	cfg, err := config.NewConfig(nil)
+	cfg, err := config.NewConfig(config.NewFileConfig())
 	if err != nil {
 		log.Fatal(err)
 	}

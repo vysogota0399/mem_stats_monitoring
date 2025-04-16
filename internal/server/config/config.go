@@ -106,6 +106,10 @@ func (c *Config) parseFlags() error {
 		c.PrivateKey = pk
 	}
 
+	if flag.Lookup("config") == nil {
+		flag.StringVar(&c.ConfigPath, "config", "", "file to config.json")
+	}
+
 	flag.Parse()
 
 	return nil

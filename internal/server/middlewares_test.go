@@ -110,6 +110,7 @@ func Test_signerMiddleware(t *testing.T) {
 			resp, err := srv.Client().Do(req)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.wantStatusCode, resp.StatusCode)
+			assert.NoError(t, resp.Body.Close())
 		})
 	}
 }
@@ -159,6 +160,7 @@ func Test_headerMiddleware(t *testing.T) {
 			resp, err := srv.Client().Do(req)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.headerAdded, resp.Header.Get("Content-Type") == "application/json")
+			assert.NoError(t, resp.Body.Close())
 		})
 	}
 }
@@ -200,6 +202,7 @@ func Test_httpLoggerMiddleware(t *testing.T) {
 			resp, err := srv.Client().Do(req)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.wantStatusCode, resp.StatusCode)
+			assert.NoError(t, resp.Body.Close())
 		})
 	}
 }
@@ -279,6 +282,7 @@ func Test_decrypterMiddleware(t *testing.T) {
 			resp, err := srv.Client().Do(req)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.wantStatusCode, resp.StatusCode)
+			assert.NoError(t, resp.Body.Close())
 		})
 	}
 }

@@ -29,13 +29,14 @@ func NewStorage(
 	cfg *config.Config,
 	migrator Migrator,
 	connectionOpener ConnectionOpener,
+	srsb SourceBuilder,
 ) (Storage, error) {
 	if cfg.DatabaseDSN != "" {
 		return NewPG(lc, lg, cfg, migrator, connectionOpener)
 	}
 
 	if cfg.FileStoragePath != "" {
-		return NewPersistance(lc, cfg, dumper, lg)
+		return NewPersistance(lc, cfg, dumper, lg, srsb)
 	}
 
 	return NewMemory(lg), nil

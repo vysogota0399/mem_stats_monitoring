@@ -223,6 +223,7 @@ func TestShowRestMetricHandler_handler(t *testing.T) {
 			body, err := io.ReadAll(resp.Body)
 			assert.NoError(t, err)
 			assert.JSONEq(t, tt.want.body, string(body))
+			assert.NoError(t, resp.Body.Close())
 		})
 	}
 }
