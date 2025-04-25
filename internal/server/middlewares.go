@@ -5,10 +5,13 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
+	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"time"
 
+	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 	uuid "github.com/satori/go.uuid"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/config"
@@ -36,17 +39,12 @@ func (rw *signResponseReadWriter) Read(b []byte) (int, error) {
 	return rw.b.Read(b)
 }
 
-func signerMiddleware(lg *logging.ZapLogger, cfg *config.Config) gin.HandlerFunc {
+func signerMiddleware(lg *logging.ZapLogger, key []byte) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if len(cfg.Key) == 0 {
-			c.Next()
-			return
-		}
-
 		rw := &signResponseReadWriter{b: &bytes.Buffer{}, ResponseWriter: c.Writer}
 		c.Writer = rw
 
-		cms := crypto.NewCms(hmac.New(sha256.New, []byte(cfg.Key)))
+		cms := crypto.NewCms(hmac.New(sha256.New, key))
 		base64sign := c.Request.Header.Get(signHeaderKey)
 		if base64sign == "" {
 			c.Next()
@@ -92,13 +90,8 @@ type Decrypter interface {
 	Decrypt(ciphertext string) (string, error)
 }
 
-func decrypterMiddleware(lg *logging.ZapLogger, cfg *config.Config, decrypter Decrypter) gin.HandlerFunc {
+func decrypterMiddleware(lg *logging.ZapLogger, decrypter Decrypter) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if cfg.PrivateKey == nil {
-			c.Next()
-			return
-		}
-
 		bodyBuff := &bytes.Buffer{}
 		if _, err := io.Copy(bodyBuff, c.Request.Body); err != nil {
 			lg.ErrorCtx(c, "read body error", zap.Error(err))
@@ -171,4 +164,60 @@ func httpLoggerMiddleware(lg *logging.ZapLogger) gin.HandlerFunc {
 			zap.Duration("duration", time.Since(start)),
 		)
 	}
+}
+
+const XRealIPHeader = "X-Real-IP"
+
+func aclMiddleware(lg *logging.ZapLogger, ipnet *net.IPNet) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		realIp := ctx.GetHeader(XRealIPHeader)
+		if realIp == "" {
+			lg.DebugCtx(ctx, "headers do not have real ip")
+			ctx.AbortWithStatus(http.StatusForbidden)
+			return
+		}
+
+		ip := net.ParseIP(realIp)
+		if ip == nil {
+			lg.DebugCtx(ctx, "invalid ip format", zap.String("ip", realIp))
+			ctx.AbortWithStatus(http.StatusForbidden)
+			return
+		}
+
+		if !ipnet.Contains(ip) {
+			lg.DebugCtx(ctx, "ip is not part of network", zap.String("ip", realIp), zap.String("networ", ipnet.String()))
+			ctx.AbortWithStatus(http.StatusForbidden)
+			return
+		}
+
+		ctx.Next()
+	}
+}
+
+func middlewares(cfg *config.Config, lg *logging.ZapLogger, decrypter Decrypter) ([]gin.HandlerFunc, error) {
+	mws := []gin.HandlerFunc{
+		gin.Recovery(),
+		headerMiddleware(),
+		httpLoggerMiddleware(lg),
+		gzip.Gzip(gzip.DefaultCompression),
+	}
+
+	if cfg.PrivateKey != nil {
+		mws = append(mws, decrypterMiddleware(lg, decrypter))
+	}
+
+	if cfg.Key != "" {
+		mws = append(mws, signerMiddleware(lg, []byte(cfg.Key)))
+	}
+
+	if acl := cfg.TrustedSubnet; acl != "" {
+		_, network, err := net.ParseCIDR(acl)
+		if err != nil {
+			return nil, fmt.Errorf("router: invalid format for TrustedSubnet error %w", err)
+		}
+
+		mws = append(mws, aclMiddleware(lg, network))
+	}
+
+	return mws, nil
 }

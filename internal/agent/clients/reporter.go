@@ -35,18 +35,23 @@ type Requester interface {
 	Request(r *http.Request) (*http.Response, error)
 }
 
+type IRealIPHeaderSetter interface {
+	Call(req *http.Request) error
+}
+
 // Reporter handles the communication with the metrics server
 type Reporter struct {
-	client        Requester
-	address       string
-	lg            *logging.ZapLogger
-	compressor    compressor
-	maxAttempts   uint8
-	secretKey     []byte
-	semaphore     *semaphore
-	publicKeyPath io.Reader
-	encryptor     Encryptor
-	repository    *agent.MetricsRepository
+	client          Requester
+	address         string
+	lg              *logging.ZapLogger
+	compressor      compressor
+	maxAttempts     uint8
+	secretKey       []byte
+	semaphore       *semaphore
+	publicKeyPath   io.Reader
+	encryptor       Encryptor
+	repository      *agent.MetricsRepository
+	ipAddressSetter IRealIPHeaderSetter
 }
 
 // NewReporter creates a new Reporter instance with basic configuration
@@ -86,17 +91,18 @@ type Encryptor interface {
 }
 
 // NewCompReporter creates a new Reporter instance with compression and rate limiting
-func NewCompReporter(address string, lg *logging.ZapLogger, cfg *config.Config, client Requester, repository *agent.MetricsRepository) *Reporter {
+func NewCompReporter(address string, lg *logging.ZapLogger, cfg *config.Config, client Requester, ips IRealIPHeaderSetter, repository *agent.MetricsRepository) *Reporter {
 	reporter := &Reporter{
-		address:       address,
-		client:        client,
-		lg:            lg,
-		compressor:    gzbody,
-		maxAttempts:   cfg.MaxAttempts,
-		secretKey:     []byte(cfg.Key),
-		semaphore:     NewSemaphore(cfg.RateLimit),
-		publicKeyPath: cfg.HTTPCert,
-		repository:    repository,
+		address:         address,
+		client:          client,
+		lg:              lg,
+		compressor:      gzbody,
+		maxAttempts:     cfg.MaxAttempts,
+		secretKey:       []byte(cfg.Key),
+		semaphore:       NewSemaphore(cfg.RateLimit),
+		publicKeyPath:   cfg.HTTPCert,
+		ipAddressSetter: ips,
+		repository:      repository,
 	}
 
 	if cfg.HTTPCert != nil {
@@ -217,6 +223,8 @@ type bodyKey string
 
 var bKey bodyKey = "body"
 
+const XRealIPHeader = "X-Real-IP"
+
 func (c *Reporter) doRequest(ctx context.Context, req *http.Request) (*http.Response, error) {
 	request := func() (*http.Response, error) {
 		c.semaphore.Acquire()
@@ -284,6 +292,10 @@ func (c *Reporter) processRequest(ctx context.Context, req *http.Request) (*http
 
 	if encErr := c.encryptRequest(reqCtx, req); encErr != nil {
 		return nil, fmt.Errorf("internal/agent/clients/reporter encrypt request error %w", encErr)
+	}
+
+	if setIpErr := c.ipAddressSetter.Call(req); setIpErr != nil {
+		return nil, fmt.Errorf("internal/agent/clients/reporter set ip address error %w", setIpErr)
 	}
 
 	resp, reqErr := c.doRequest(reqCtx, req)

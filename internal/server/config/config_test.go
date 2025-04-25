@@ -24,19 +24,30 @@ func TestNewConfig(t *testing.T) {
 	assert.NoError(t, err)
 	err = os.Setenv("DATABASE_DSN", "pg@pg")
 	assert.NoError(t, err)
+	err = os.Setenv("KEY", "")
+	assert.NoError(t, err)
 	err = os.Setenv("CRYPTO_KEY", "")
+	assert.NoError(t, err)
+	err = os.Setenv("CONFIG", "")
+	assert.NoError(t, err)
+	err = os.Setenv("TRUSTED_SUBNET", "127.0.0.1/8")
 	assert.NoError(t, err)
 
 	cfg, err := NewConfig(nil)
 	assert.NoError(t, err)
 
-	assert.Equal(t, cfg.Address, "localhost")
-	assert.Equal(t, cfg.AppEnv, "development")
-	assert.Equal(t, cfg.LogLevel, int64(0))
-	assert.Equal(t, cfg.StoreInterval, int64(10))
-	assert.Equal(t, cfg.FileStoragePath, "/tmp")
-	assert.Equal(t, cfg.Restore, false)
-	assert.Equal(t, cfg.DatabaseDSN, "pg@pg")
+	assert.Equal(t, "localhost", cfg.Address)
+	assert.Equal(t, "development", cfg.AppEnv)
+	assert.Equal(t, int64(0), cfg.LogLevel)
+	assert.Equal(t, int64(10), cfg.StoreInterval)
+	assert.Equal(t, "/tmp", cfg.FileStoragePath)
+	assert.Equal(t, false, cfg.Restore)
+	assert.Equal(t, "pg@pg", cfg.DatabaseDSN)
+	assert.Equal(t, "", cfg.Key)
+	assert.Equal(t, nil, cfg.PrivateKey)
+	assert.Equal(t, "", cfg.ConfigPath)
+	assert.Equal(t, "127.0.0.1/8", cfg.TrustedSubnet)
+
 }
 
 func TestConfig_IsDBDSNPresent(t *testing.T) {
