@@ -26,13 +26,24 @@ func BenchmarkReporter_UpdateMetrics(b *testing.B) {
 	defer ctrl.Finish()
 
 	client := NewMockRequester(ctrl)
+	ips := mocks.NewMockIRealIPHeaderSetter(ctrl)
+
+	ips.EXPECT().Call(gomock.Any()).AnyTimes().Return(nil)
+
 	response := &http.Response{StatusCode: http.StatusOK}
 	response.Body = io.NopCloser(bytes.NewBuffer([]byte{}))
 
 	lg, err := logging.MustZapLogger(&config.Config{LogLevel: 2})
 	assert.NoError(b, err)
 
-	reporter := NewCompReporter("", lg, &config.Config{RateLimit: 10}, client, agent.NewMetricsRepository(storage.NewMemoryStorage(nil)))
+	reporter := NewCompReporter(
+		"",
+		lg,
+		&config.Config{RateLimit: 10},
+		client,
+		ips,
+		agent.NewMetricsRepository(storage.NewMemoryStorage(nil)),
+	)
 	ctx := context.Background()
 
 	types := []string{models.CounterType, models.CounterType}
@@ -136,6 +147,7 @@ func TestReporter_UpdateMetric(t *testing.T) {
 		lg          *logging.ZapLogger
 		compressor  compressor
 		encryptor   *mocks.MockEncryptor
+		ips         *mocks.MockIRealIPHeaderSetter
 		maxAttempts uint8
 		secretKey   []byte
 	}
@@ -174,6 +186,8 @@ func TestReporter_UpdateMetric(t *testing.T) {
 			},
 			wantErr: false,
 			prepare: func(f *fields) {
+				f.ips.EXPECT().Call(gomock.Any()).Return(nil)
+
 				f.encryptor.EXPECT().
 					Encrypt(gomock.Any()).
 					Return("encrypted", nil)
@@ -205,6 +219,8 @@ func TestReporter_UpdateMetric(t *testing.T) {
 			},
 			wantErr: false,
 			prepare: func(f *fields) {
+				f.ips.EXPECT().Call(gomock.Any()).Return(nil)
+
 				f.encryptor.EXPECT().
 					Encrypt(gomock.Any()).
 					Return("encrypted", nil)
@@ -258,6 +274,8 @@ func TestReporter_UpdateMetric(t *testing.T) {
 			},
 			wantErr: true,
 			prepare: func(f *fields) {
+				f.ips.EXPECT().Call(gomock.Any()).Return(nil)
+
 				f.encryptor.EXPECT().
 					Encrypt(gomock.Any()).
 					Return("encrypted", nil)
@@ -284,6 +302,8 @@ func TestReporter_UpdateMetric(t *testing.T) {
 			},
 			wantErr: true,
 			prepare: func(f *fields) {
+				f.ips.EXPECT().Call(gomock.Any()).Return(nil)
+
 				f.encryptor.EXPECT().
 					Encrypt(gomock.Any()).
 					Return("encrypted", nil)
@@ -300,6 +320,7 @@ func TestReporter_UpdateMetric(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			tt.fields.ips = mocks.NewMockIRealIPHeaderSetter(ctrl)
 			// Prepare mock behavior
 			tt.prepare(tt.fields)
 
@@ -312,6 +333,7 @@ func TestReporter_UpdateMetric(t *testing.T) {
 					HTTPCert:    bytes.NewBuffer([]byte{}),
 				},
 				tt.fields.client,
+				tt.fields.ips,
 				agent.NewMetricsRepository(storage.NewMemoryStorage(nil)),
 			)
 
@@ -336,6 +358,7 @@ func TestReporter_UpdateMetrics(t *testing.T) {
 	type fields struct {
 		client      *MockRequester
 		address     string
+		ips         *mocks.MockIRealIPHeaderSetter
 		lg          *logging.ZapLogger
 		compressor  compressor
 		maxAttempts uint8
@@ -374,6 +397,8 @@ func TestReporter_UpdateMetrics(t *testing.T) {
 			},
 			wantErr: false,
 			prepare: func(f *fields) {
+				f.ips.EXPECT().Call(gomock.Any()).Return(nil)
+
 				f.client.EXPECT().
 					Request(gomock.Any()).
 					Return(&http.Response{
@@ -398,6 +423,8 @@ func TestReporter_UpdateMetrics(t *testing.T) {
 			},
 			wantErr: false,
 			prepare: func(f *fields) {
+				f.ips.EXPECT().Call(gomock.Any()).Return(nil)
+
 				f.client.EXPECT().
 					Request(gomock.Any()).
 					Return(&http.Response{
@@ -446,6 +473,7 @@ func TestReporter_UpdateMetrics(t *testing.T) {
 			},
 			wantErr: true,
 			prepare: func(f *fields) {
+				f.ips.EXPECT().Call(gomock.Any()).Return(nil)
 				f.client.EXPECT().Request(gomock.Any()).Return(nil, errors.New("request failed"))
 			},
 		},
@@ -467,6 +495,7 @@ func TestReporter_UpdateMetrics(t *testing.T) {
 			},
 			wantErr: true,
 			prepare: func(f *fields) {
+				f.ips.EXPECT().Call(gomock.Any()).Return(nil)
 				f.client.EXPECT().
 					Request(gomock.Any()).
 					Return(&http.Response{
@@ -479,6 +508,7 @@ func TestReporter_UpdateMetrics(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			tt.fields.ips = mocks.NewMockIRealIPHeaderSetter(ctrl)
 			// Prepare mock behavior
 			tt.prepare(tt.fields)
 
@@ -490,6 +520,7 @@ func TestReporter_UpdateMetrics(t *testing.T) {
 					MaxAttempts: tt.fields.maxAttempts,
 				},
 				tt.fields.client,
+				tt.fields.ips,
 				agent.NewMetricsRepository(storage.NewMemoryStorage(nil)),
 			)
 			c.encryptor = nil

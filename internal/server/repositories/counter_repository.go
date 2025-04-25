@@ -39,19 +39,21 @@ func (rep *CounterRepository) Create(ctx context.Context, cntr *models.Counter) 
 		Name: cntr.Name,
 	}
 
-	if err := rep.storage.GetCounter(ctx, &record); err != nil {
-		if !errors.Is(err, storages.ErrNoRecords) {
-			return fmt.Errorf("counter_repository.go: Create get counter error %w", err)
+	return rep.storage.Tx(ctx, func(ctx context.Context) error {
+		if err := rep.storage.GetCounter(ctx, &record); err != nil {
+			if !errors.Is(err, storages.ErrNoRecords) {
+				return fmt.Errorf("counter_repository.go: Create get counter error %w", err)
+			}
 		}
-	}
 
-	cntr.Value += record.Value
+		cntr.Value += record.Value
 
-	if err := rep.storage.CreateOrUpdate(ctx, models.CounterType, cntr.Name, cntr.Value); err != nil {
-		return fmt.Errorf("counter_repository.go: create or update counter error %w", err)
-	}
+		if err := rep.storage.CreateOrUpdate(ctx, models.CounterType, cntr.Name, cntr.Value); err != nil {
+			return fmt.Errorf("counter_repository.go: create or update counter error %w", err)
+		}
 
-	return nil
+		return nil
+	})
 }
 
 // FindByName возвращает запись из хранилища по имени.

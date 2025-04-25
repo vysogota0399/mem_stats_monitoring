@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/server/config"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 )
@@ -48,7 +49,7 @@ func TestNewRouter(t *testing.T) {
 				t,
 				fx.Populate(&l, &s),
 			)
-			got := NewRouter(tt.args.handlers, l, nil, nil, nil)
+			got := NewRouter(tt.args.handlers, l, nil, &config.Config{}, nil)
 			assert.NotNil(t, got)
 			err := app.Start(context.Background())
 			assert.NoError(t, err)
