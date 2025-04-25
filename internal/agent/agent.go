@@ -42,7 +42,7 @@ func NewAgent(lg *logging.ZapLogger, cfg config.Config, store storage.Storage) *
 		lg:                   lg,
 		storage:              store,
 		cfg:                  cfg,
-		httpClient:           clients.NewCompReporter(cfg.ServerURL, lg, &cfg, clients.NewDefaulut()),
+		httpClient:           clients.NewCompReporter(cfg.ServerURL, lg, &cfg, clients.NewDefaulut(), clients.NewIpSetter(lg)),
 		runtimeMetrics:       runtimeMetricsDefinition,
 		customMetrics:        customMetricsDefinition,
 		virtualMemoryMetrics: virtualMemoryMetricsDefinition,

@@ -34,17 +34,22 @@ type Requester interface {
 	Request(r *http.Request) (*http.Response, error)
 }
 
+type IRealIPHeaderSetter interface {
+	Call(req *http.Request) error
+}
+
 // Reporter handles the communication with the metrics server
 type Reporter struct {
-	client        Requester
-	address       string
-	lg            *logging.ZapLogger
-	compressor    compressor
-	maxAttempts   uint8
-	secretKey     []byte
-	semaphore     *semaphore
-	publicKeyPath io.Reader
-	encryptor     Encryptor
+	client          Requester
+	address         string
+	lg              *logging.ZapLogger
+	compressor      compressor
+	maxAttempts     uint8
+	secretKey       []byte
+	semaphore       *semaphore
+	publicKeyPath   io.Reader
+	encryptor       Encryptor
+	ipAddressSetter IRealIPHeaderSetter
 }
 
 // NewReporter creates a new Reporter instance with basic configuration
@@ -84,16 +89,17 @@ type Encryptor interface {
 }
 
 // NewCompReporter creates a new Reporter instance with compression and rate limiting
-func NewCompReporter(address string, lg *logging.ZapLogger, cfg *config.Config, client Requester) *Reporter {
+func NewCompReporter(address string, lg *logging.ZapLogger, cfg *config.Config, client Requester, ips IRealIPHeaderSetter) *Reporter {
 	reporter := &Reporter{
-		address:       address,
-		client:        client,
-		lg:            lg,
-		compressor:    gzbody,
-		maxAttempts:   cfg.MaxAttempts,
-		secretKey:     []byte(cfg.Key),
-		semaphore:     NewSemaphore(cfg.RateLimit),
-		publicKeyPath: cfg.HTTPCert,
+		address:         address,
+		client:          client,
+		lg:              lg,
+		compressor:      gzbody,
+		maxAttempts:     cfg.MaxAttempts,
+		secretKey:       []byte(cfg.Key),
+		semaphore:       NewSemaphore(cfg.RateLimit),
+		publicKeyPath:   cfg.HTTPCert,
+		ipAddressSetter: ips,
 	}
 
 	if cfg.HTTPCert != nil {
@@ -205,6 +211,8 @@ type bodyKey string
 
 var bKey bodyKey = "body"
 
+const XRealIPHeader = "X-Real-IP"
+
 func (c *Reporter) requestDo(ctx context.Context, req *http.Request) (*http.Response, error) {
 	resCh := make(chan *http.Response, c.maxAttempts)
 	errCh := make(chan error)
@@ -248,6 +256,10 @@ func (c *Reporter) requestDo(ctx context.Context, req *http.Request) (*http.Resp
 				errChan <- fmt.Errorf("internal/agent/clients/reporter encrypt request error %w", encErr)
 			}
 
+			return
+		}
+
+		if err := c.ipAddressSetter.Call(req); err != nil {
 			return
 		}
 

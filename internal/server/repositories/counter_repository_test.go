@@ -63,6 +63,9 @@ func TestCounterRepository_Create(t *testing.T) {
 			name: "when get counter error",
 			prepare: func(fields *fields) {
 				fields.storage.EXPECT().GetCounter(gomock.Any(), gomock.Any()).Return(errors.New("get counter error"))
+				fields.storage.EXPECT().Tx(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, fn func(ctx context.Context) error) error {
+					return fn(ctx)
+				})
 			},
 			fields: fields{
 				actual: &models.Counter{Name: "test", Value: 1},
@@ -74,6 +77,9 @@ func TestCounterRepository_Create(t *testing.T) {
 			prepare: func(fields *fields) {
 				fields.storage.EXPECT().GetCounter(gomock.Any(), gomock.Any()).Return(nil)
 				fields.storage.EXPECT().CreateOrUpdate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("create or update counter error"))
+				fields.storage.EXPECT().Tx(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, fn func(ctx context.Context) error) error {
+					return fn(ctx)
+				})
 			},
 			fields: fields{
 				actual: &models.Counter{Name: "test", Value: 1},
@@ -87,6 +93,9 @@ func TestCounterRepository_Create(t *testing.T) {
 				fields.storage.EXPECT().CreateOrUpdate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, mType, mName string, val any) error {
 					fields.actual.Value++
 					return nil
+				})
+				fields.storage.EXPECT().Tx(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, fn func(ctx context.Context) error) error {
+					return fn(ctx)
 				})
 			},
 			fields: fields{

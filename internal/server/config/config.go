@@ -27,9 +27,10 @@ type Config struct {
 	FileStoragePath string    `json:"file_storage_path" env:"FILE_STORAGE_PATH" envDefault:"data/records.txt"` // Path for file storage
 	Restore         bool      `json:"restore" env:"RESTORE" envDefault:"true"`                                 // Whether to restore data on startup
 	DatabaseDSN     string    `json:"database_dsn" env:"DATABASE_DSN"`                                         // Database connection string
-	Key             string    `json:"key" env:"KEY"`                                                           // Secret key for request encryption
+	Key             string    `json:"key" env:"KEY"`                                                           // Secret key for request signature check
 	PrivateKey      io.Reader `json:"private_key_path"`
 	ConfigPath      string    `json:"config_path" env:"CONFIG" envDefault:""`
+	TrustedSubnet   string    `json:"trusted_subnet" env:"TRUSTED_SUBNET" envDefault:""`
 }
 
 func (c *Config) LLevel() zapcore.Level {
@@ -93,7 +94,7 @@ func (c *Config) parseFlags() error {
 	flag.BoolVar(&c.Restore, "r", true, "flag - restore from file on boot")
 	flag.StringVar(&c.DatabaseDSN, "d", "", "database dsn")
 	if flag.Lookup("k") == nil {
-		flag.StringVar(&c.Key, "k", "", "Secret key for http request encryption")
+		flag.StringVar(&c.Key, "k", "", "Secret key for http request signature check")
 	}
 
 	if flag.Lookup("crypto-key") == nil {
@@ -106,8 +107,12 @@ func (c *Config) parseFlags() error {
 		c.PrivateKey = pk
 	}
 
-	if flag.Lookup("c") == nil {
-		flag.StringVar(&c.ConfigPath, "c", "", "file to config.json")
+	if flag.Lookup("config") == nil {
+		flag.StringVar(&c.ConfigPath, "config", "", "file to config.json")
+	}
+
+	if flag.Lookup("t") == nil {
+		flag.StringVar(&c.TrustedSubnet, "t", "", "trusted subnet for incoming requests")
 	}
 
 	flag.Parse()
