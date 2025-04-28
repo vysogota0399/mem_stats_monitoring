@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package services.metrics;
 
-option go_package = "github.com/vysogota0399/mem_stats_monitoring/pkg/proto/services/metrics";
+option go_package = "github.com/vysogota0399/mem_stats_monitoring/pkg/gen/services/metrics";
 
 import "pkg/proto/services/metrics/create_metric_params.proto";
 import "pkg/proto/services/metrics/create_metrics_batch_params.proto";

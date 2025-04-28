@@ -170,17 +170,16 @@ tasks:
 
 
   generate_metrics_service_command:
-    dir: pkg
     cmds:
       - |
         protoc -I ./ \
-          proto/entities/counter.proto \
-          proto/entities/gauge.proto \
-          proto/services/metrics/item.proto \
-          proto/services/metrics/create_metric_params.proto \
-          proto/services/metrics/create_metrics_batch_params.proto \
-          proto/services/metrics/metrics_service.proto \
-          --go_out=./gen \
+          pkg/proto/entities/counter.proto \
+          pkg/proto/entities/gauge.proto \
+          pkg/proto/services/metrics/item.proto \
+          pkg/proto/services/metrics/create_metric_params.proto \
+          pkg/proto/services/metrics/create_metrics_batch_params.proto \
+          pkg/proto/services/metrics/metrics_service.proto \
+          --go_out=./pkg/gen \
           --go_opt=module=github.com/vysogota0399/mem_stats_monitoring/pkg/gen \
-          --go-grpc_out=./gen \
+          --go-grpc_out=./pkg/gen \
           --go-grpc_opt=module=github.com/vysogota0399/mem_stats_monitoring/pkg/gen
