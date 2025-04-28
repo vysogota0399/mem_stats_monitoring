@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package services.metrics;
+
+option go_package = "github.com/vysogota0399/mem_stats_monitoring/pkg/gen/services/metrics";
+
+import "pkg/proto/entities/counter.proto";
+import "pkg/proto/entities/gauge.proto";
+
+message Item {
+  oneof metric {
+    entities.Counter counter = 1;
+    entities.Gauge gauge     = 2;
+  }
+}
