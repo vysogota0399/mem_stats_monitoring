@@ -28,8 +28,8 @@ func NewMemory(lg *logging.ZapLogger) *Memory {
 // It should not lock the mutex, because it will be called from Tx.
 func (m *Memory) CreateOrUpdate(ctx context.Context, mType, mName string, val any) error {
 	if ctx.Value(txInProgressKey) == nil {
-		m.mutex.RLock()
-		defer m.mutex.RUnlock()
+		m.mutex.Lock()
+		defer m.mutex.Unlock()
 	}
 
 	m.lg.DebugCtx(ctx, "create or update metric", zap.String("mType", mType), zap.String("mName", mName))

@@ -105,7 +105,7 @@ func NewCompReporter(address string, lg *logging.ZapLogger, cfg *config.Config, 
 
 // UpdateMetric sends a single metric update to the server
 func (c *Reporter) UpdateMetric(ctx context.Context, mType, mName, value string) error {
-	ctx = c.lg.WithContextFields(ctx, zap.String("name", "http"))
+	reqCtx := c.lg.WithContextFields(ctx, zap.String("name", "http"))
 	body, err := c.prepareBody(mType, mName, value)
 	if err != nil {
 		return err
@@ -124,15 +124,10 @@ func (c *Reporter) UpdateMetric(ctx context.Context, mType, mName, value string)
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("X-Request-ID", uuid.NewV4().String())
 
-	resp, err := c.requestDo(ctx, req)
+	resp, err := c.processRequest(reqCtx, req)
 	if err != nil {
 		return fmt.Errorf("internal/agent/clients/reporter: send request err: %w", err)
 	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			c.lg.ErrorCtx(ctx, "failed to close response body", zap.Error(err))
-		}
-	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return ErrUnsuccessfulResponse
@@ -143,6 +138,8 @@ func (c *Reporter) UpdateMetric(ctx context.Context, mType, mName, value string)
 
 // UpdateMetrics sends a batch of metric updates to the server
 func (c *Reporter) UpdateMetrics(ctx context.Context, data []*models.Metric) error {
+	reqCtx := c.lg.WithContextFields(ctx, zap.String("name", "http"))
+
 	metricsBody := make([]MetricsBody, 0, len(data))
 	for _, m := range data {
 		rec, err := generateMetric(m.Type, m.Name, m.Value)
@@ -160,7 +157,7 @@ func (c *Reporter) UpdateMetrics(ctx context.Context, data []*models.Metric) err
 	}
 
 	req, err := http.NewRequestWithContext(
-		ctx,
+		reqCtx,
 		"POST", fmt.Sprintf("%s/updates/", c.address),
 		&body,
 	)
@@ -170,15 +167,10 @@ func (c *Reporter) UpdateMetrics(ctx context.Context, data []*models.Metric) err
 
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("X-Request-ID", uuid.NewV4().String())
-	resp, err := c.requestDo(ctx, req)
+	resp, err := c.processRequest(reqCtx, req)
 	if err != nil {
 		return fmt.Errorf("internal/agent/clients/reporter: send request err: %w", err)
 	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			c.lg.ErrorCtx(ctx, "failed to close response body", zap.Error(err))
-		}
-	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return ErrUnsuccessfulResponse
@@ -205,104 +197,81 @@ type bodyKey string
 
 var bKey bodyKey = "body"
 
-func (c *Reporter) requestDo(ctx context.Context, req *http.Request) (*http.Response, error) {
-	resCh := make(chan *http.Response, c.maxAttempts)
-	errCh := make(chan error)
-	defer close(resCh)
-
-	doRequest := func(ctx context.Context, req *http.Request, resChan chan *http.Response, errChan chan error) {
+func (c *Reporter) doRequest(ctx context.Context, req *http.Request) (*http.Response, error) {
+	request := func() (*http.Response, error) {
 		c.semaphore.Acquire()
 		defer c.semaphore.Release()
 
-		start := time.Now()
-		reader, readerErr := req.GetBody()
-		if readerErr != nil {
-			if ctx.Err() == nil {
-				errChan <- fmt.Errorf("internal/agent/clients/reporter get body reader error %w", readerErr)
-			}
-
-			return
+		resp, err := c.client.Request(req)
+		if err != nil {
+			return nil, fmt.Errorf("reporter: request failed error %w", err)
 		}
 
-		buff := bytes.Buffer{}
-		if _, copyErr := io.Copy(&buff, reader); copyErr != nil {
-			if ctx.Err() == nil {
-				errChan <- fmt.Errorf("internal/agent/clients/reporter read body error %w", copyErr)
-			}
-
-			return
+		if err := resp.Body.Close(); err != nil {
+			return nil, fmt.Errorf("reporter: response body close error %w", err)
 		}
 
-		ctx = context.WithValue(ctx, bKey, buff.Bytes())
-
-		if signErr := c.signRequest(ctx, req); signErr != nil {
-			if ctx.Err() == nil {
-				errChan <- fmt.Errorf("internal/agent/clients/reporter sign request error %w", signErr)
-			}
-
-			return
-		}
-
-		if encErr := c.encryptRequest(ctx, req); encErr != nil {
-			if ctx.Err() == nil {
-				errChan <- fmt.Errorf("internal/agent/clients/reporter encrypt request error %w", encErr)
-			}
-
-			return
-		}
-
-		resp, reqErr := c.client.Request(req)
-		if reqErr != nil {
-			if ctx.Err() == nil {
-				errChan <- fmt.Errorf("internal/agent/clients/reporter send request error %w", reqErr)
-			}
-
-			return
-		}
-
-		defer func() {
-			if err := resp.Body.Close(); err != nil {
-				c.lg.ErrorCtx(ctx, "failed to close response body", zap.Error(err))
-			}
-		}()
-
-		c.lg.DebugCtx(ctx,
-			"request",
-			zap.String("method", req.Method),
-			zap.String("url", req.URL.String()),
-			zap.String("body", buff.String()),
-			zap.Duration("duration", time.Since(start)),
-			zap.String("status", resp.Status),
-			zap.Any("headers", req.Header),
-		)
-
-		if ctx.Err() == nil {
-			resChan <- resp
-		}
+		return resp, nil
 	}
 
-	var err error
-
+	var (
+		resp *http.Response
+		err  error
+	)
 	for i := range c.maxAttempts {
-		go doRequest(ctx, req, resCh, errCh)
-
-		select {
-		case <-ctx.Done():
-			return nil, fmt.Errorf("internal/agent/clients/reporter context canceled")
-		case res := <-resCh:
-			return res, nil
-		case err = <-errCh:
-			if i >= c.maxAttempts-1 {
-				return nil, err
-			}
-
-			c.lg.DebugCtx(ctx, "wait next", zap.Int("total", int(c.maxAttempts)), zap.Int("current", int(i+1)))
-			time.Sleep(time.Duration(utils.Delay(uint8(i))) * time.Second)
-			go doRequest(ctx, req, resCh, errCh)
+		c.lg.DebugCtx(ctx, "request", zap.Uint8("attempt", i+1), zap.Uint16("limit", uint16(c.maxAttempts)))
+		resp, err = request()
+		if err == nil {
+			return resp, nil
 		}
+
+		if i == c.maxAttempts-1 {
+			break
+		}
+
+		del := attemptDelay(i)
+		runNext := time.Now().Add(del).Format(time.RFC3339Nano)
+		c.lg.DebugCtx(
+			ctx,
+			"request failed",
+			zap.Uint8("attempt", i+1),
+			zap.Uint16("limit", uint16(c.maxAttempts)),
+			zap.String("run next", runNext),
+		)
+		time.Sleep(del)
 	}
 
-	return nil, err
+	return nil, fmt.Errorf("reporter: request max attempts exceeded errpr %w", err)
+}
+
+func (c *Reporter) processRequest(ctx context.Context, req *http.Request) (*http.Response, error) {
+	buff := bytes.Buffer{}
+
+	reader, readerErr := req.GetBody()
+	if readerErr != nil {
+		return nil, fmt.Errorf("internal/agent/clients/reporter read body error %w", readerErr)
+	}
+
+	if _, copyErr := io.Copy(&buff, reader); copyErr != nil {
+		return nil, fmt.Errorf("internal/agent/clients/reporter read body error %w", copyErr)
+	}
+
+	reqCtx := context.WithValue(ctx, bKey, buff.Bytes())
+
+	if signErr := c.signRequest(reqCtx, req); signErr != nil {
+		return nil, fmt.Errorf("internal/agent/clients/reporter sign request error %w", signErr)
+	}
+
+	if encErr := c.encryptRequest(reqCtx, req); encErr != nil {
+		return nil, fmt.Errorf("internal/agent/clients/reporter encrypt request error %w", encErr)
+	}
+
+	resp, reqErr := c.doRequest(reqCtx, req)
+	if reqErr != nil {
+		return nil, fmt.Errorf("internal/agent/clients/reporter send request error %w", reqErr)
+	}
+
+	return resp, nil
 }
 
 var ErrBodyKeyNotFoundInContext error = fmt.Errorf("internal/agent/clients/reporter.go there is no key %s in current context", bKey)
@@ -417,4 +386,10 @@ func gzbody(b *bytes.Buffer) (*bytes.Buffer, error) {
 	}
 
 	return res, nil
+}
+
+func attemptDelay(i uint8) time.Duration {
+	delay := int(utils.Delay(i) * 1000)
+
+	return time.Duration(delay) * time.Millisecond
 }

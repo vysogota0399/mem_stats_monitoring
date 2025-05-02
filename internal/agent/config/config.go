@@ -123,7 +123,7 @@ func (c *Config) parseFlags() error {
 	)
 
 	const (
-		defaultReportIntercal = 10
+		defaultReportIntercal = 2
 		defaultPollInterval   = 2
 	)
 

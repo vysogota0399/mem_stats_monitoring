@@ -9,7 +9,6 @@ import (
 
 	_ "net/http/pprof"
 
-	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/clients"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/config"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/storage"
@@ -17,8 +16,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// HTTPClient defines the interface for making HTTP requests to the metrics server
-type HTTPClient interface {
+// Adapter defines the interface for making integration with server
+type Adapter interface {
 	UpdateMetric(ctx context.Context, mType, mName, value string) error
 	UpdateMetrics(ctx context.Context, data []*models.Metric) error
 }
@@ -28,26 +27,28 @@ type Agent struct {
 	lg                   *logging.ZapLogger
 	storage              storage.Storage
 	cfg                  config.Config
-	httpClient           HTTPClient
+	reporter             Adapter
 	runtimeMetrics       []RuntimeMetric
 	customMetrics        []CustomMetric
 	virtualMemoryMetrics []VirtualMemoryMetric
 	cpuMetrics           []CPUMetric
 	metricsPool          *MetricsPool
+	reporterPipeLock     sync.Mutex
 }
 
 // NewAgent creates a new Agent instance with the specified configuration
-func NewAgent(lg *logging.ZapLogger, cfg config.Config, store storage.Storage) *Agent {
+func NewAgent(lg *logging.ZapLogger, cfg config.Config, store storage.Storage, rep Adapter) *Agent {
 	return &Agent{
 		lg:                   lg,
 		storage:              store,
 		cfg:                  cfg,
-		httpClient:           clients.NewCompReporter(cfg.ServerURL, lg, &cfg, clients.NewDefaulut()),
+		reporter:             rep,
 		runtimeMetrics:       runtimeMetricsDefinition,
 		customMetrics:        customMetricsDefinition,
 		virtualMemoryMetrics: virtualMemoryMetricsDefinition,
 		cpuMetrics:           cpuMetricsDefinition,
 		metricsPool:          NewMetricsPool(),
+		reporterPipeLock:     sync.Mutex{},
 	}
 }
 
@@ -92,13 +93,16 @@ func (a *Agent) startPoller(ctx context.Context, wg *sync.WaitGroup) {
 		for {
 			select {
 			case <-pollerCtx.Done():
-				a.lg.InfoCtx(pollerCtx, "poller done with context cancellation")
+				a.lg.InfoCtx(pollerCtx, "poller done with context cancellation, do report")
+				a.runReporterPipe(ctx)
 				return
 			default:
+				a.lg.DebugCtx(ctx, "poller operation started")
 				if err := a.runPollerPipe(pollerCtx); err != nil {
 					a.lg.ErrorCtx(pollerCtx, "error in poller pipe", zap.Error(err))
 				}
 
+				a.lg.DebugCtx(ctx, "poller operation started")
 				time.Sleep(a.cfg.PollInterval)
 			}
 		}
@@ -110,12 +114,13 @@ func (a Agent) startReporter(ctx context.Context, wg *sync.WaitGroup) {
 	wg.Add(1)
 
 	go func() {
+		reporterCtx := a.lg.WithContextFields(ctx, zap.String("actor", "reporter"))
+
 		defer func() {
 			wg.Done()
 			a.lg.InfoCtx(ctx, "reporter done")
 		}()
 
-		reporterCtx := a.lg.WithContextFields(ctx, zap.String("actor", "reporter"))
 		for {
 			select {
 			case <-reporterCtx.Done():

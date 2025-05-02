@@ -24,7 +24,7 @@ func TestNewAgent(t *testing.T) {
 	cfg, err := config.NewConfig(nil)
 	assert.NoError(t, err)
 
-	agent := NewAgent(logger, cfg, store)
+	agent := NewAgent(logger, cfg, store, nil)
 	assert.NotNil(t, agent)
 	assert.Equal(t, logger, agent.lg)
 	assert.Equal(t, store, agent.storage)
@@ -45,7 +45,7 @@ func TestRunPollerPipe(t *testing.T) {
 	}
 	assert.NoError(t, err)
 
-	agent := NewAgent(logger, cfg, store)
+	agent := NewAgent(logger, cfg, store, nil)
 	ctx := context.Background()
 
 	err = agent.runPollerPipe(ctx)
@@ -64,7 +64,7 @@ func TestGenMetrics(t *testing.T) {
 	cfg, err := config.NewConfig(nil)
 	assert.NoError(t, err)
 
-	agent := NewAgent(logger, cfg, store)
+	agent := NewAgent(logger, cfg, store, nil)
 	ctx := context.Background()
 
 	metricsChan := agent.genMetrics(ctx, &errgroup.Group{})
@@ -97,7 +97,7 @@ func TestSaveMetrics(t *testing.T) {
 	cfg := config.Config{}
 	assert.NoError(t, err)
 
-	agent := NewAgent(logger, cfg, store)
+	agent := NewAgent(logger, cfg, store, nil)
 
 	metricsChan := make(chan *models.Metric, 10)
 	errg, ctx := errgroup.WithContext(context.Background())
@@ -202,7 +202,7 @@ func TestAgent_Start(t *testing.T) {
 				lg:                   lg,
 				storage:              storage.NewMemoryStorage(lg),
 				cfg:                  cfg,
-				httpClient:           mockClient,
+				reporter:             mockClient,
 				runtimeMetrics:       runtimeMetricsDefinition,
 				customMetrics:        customMetricsDefinition,
 				virtualMemoryMetrics: virtualMemoryMetricsDefinition,

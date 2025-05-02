@@ -7,7 +7,8 @@ import (
 )
 
 type MetricsPool struct {
-	pool sync.Pool
+	pool     sync.Pool
+	metricsL sync.Mutex
 }
 
 func NewMetricsPool() *MetricsPool {
@@ -17,6 +18,7 @@ func NewMetricsPool() *MetricsPool {
 				return &models.Metric{}
 			},
 		},
+		metricsL: sync.Mutex{},
 	}
 }
 
@@ -25,5 +27,14 @@ func (p *MetricsPool) Get() *models.Metric {
 }
 
 func (p *MetricsPool) Put(m *models.Metric) {
+	p.metricsL.Lock()
+	defer p.metricsL.Unlock()
+
 	p.pool.Put(m.Reset())
+}
+
+func (p *MetricsPool) Free(batch []*models.Metric) {
+	for _, m := range batch {
+		p.Put(m)
+	}
 }

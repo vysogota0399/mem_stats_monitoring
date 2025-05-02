@@ -3,8 +3,11 @@ package main
 import (
 	"context"
 	"log"
+	"os"
+	"os/signal"
 
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/clients"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/config"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/storage"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
@@ -18,6 +21,13 @@ var (
 )
 
 func main() {
+	ctx, stop := signal.NotifyContext(
+		context.Background(),
+		os.Interrupt,
+		os.Kill,
+	)
+	defer stop()
+
 	cfg, err := config.NewConfig(config.NewFileConfig())
 	if err != nil {
 		log.Fatal(err)
@@ -30,11 +40,11 @@ func main() {
 
 	info(lg)
 
-	ctx := context.Background()
 	agent := agent.NewAgent(
 		lg,
 		cfg,
 		storage.NewMemoryStorage(lg),
+		clients.NewCompReporter(cfg.ServerURL, lg, &cfg, clients.NewDefaulut()),
 	)
 
 	agent.Start(ctx)

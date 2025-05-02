@@ -51,7 +51,7 @@ func NewMetricsDumper(lg *logging.ZapLogger, cfg *config.Config) *MetricsDumper 
 const rwfmode = 0644
 
 func (d *MetricsDumper) Start(ctx context.Context) error {
-	target, err := os.OpenFile(d.fileStoragePath, os.O_CREATE|os.O_APPEND, rwfmode)
+	target, err := os.OpenFile(d.fileStoragePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, rwfmode)
 	if err != nil {
 		return fmt.Errorf("metrics_dumper: failed to open file %w", err)
 	}
