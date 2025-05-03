@@ -3,9 +3,11 @@ package agent
 import (
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"math/big"
 	"runtime"
 	"strconv"
+	"sync"
 
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"
@@ -18,7 +20,7 @@ type MemValueGenerator func(*runtime.MemStats) any
 
 // Reportable interface defines the contract for metrics that can be loaded from storage
 type Reportable interface {
-	fromStore(s storage.Storage, target *models.Metric) error
+	Load(rep *MetricsRepository) (*models.Metric, error)
 }
 
 // RuntimeMetric represents a metric that can be collected from runtime memory statistics
@@ -28,11 +30,9 @@ type RuntimeMetric struct {
 	generateValue MemValueGenerator
 }
 
-// fromStore loads the metric value from storage
-func (m RuntimeMetric) fromStore(s storage.Storage, target *models.Metric) error {
-	target.Type = m.Type
-	target.Name = m.Name
-	return s.Get(target)
+// Load loads the metric value from storage
+func (m RuntimeMetric) Load(rep *MetricsRepository) (*models.Metric, error) {
+	return rep.Get(m.Name, m.Type)
 }
 
 // runtimeMetricsDefinition defines the set of runtime memory metrics to collect
@@ -158,38 +158,45 @@ var runtimeMetricsDefinition = []RuntimeMetric{
 type CustomMetric struct {
 	Name          string
 	Type          string
+	lock          sync.Mutex
 	generateValue func(*CustomMetric, *Agent) (uint64, error)
 }
 
-func (c CustomMetric) fromStore(s storage.Storage, target *models.Metric) error {
-	target.Type = c.Type
-	target.Name = c.Name
-	return s.Get(target)
+func (c *CustomMetric) Load(rep *MetricsRepository) (*models.Metric, error) {
+	return rep.Get(c.Name, c.Type)
 }
 
-var customMetricsDefinition = []CustomMetric{
+var customMetricsDefinition = []*CustomMetric{
 	{
 		Name: "PollCount",
 		Type: "counter",
+		lock: sync.Mutex{},
 		generateValue: func(m *CustomMetric, a *Agent) (uint64, error) {
 			var pollCount uint64
 			var err error
 
-			to := a.metricsPool.Get()
-			if err = a.storage.Get(to); err != nil && !errors.Is(err, storage.ErrNoRecords) {
-				return pollCount, err
-			}
+			m.lock.Lock()
+			defer m.lock.Unlock()
 
-			if to.Name == "" && to.Type == "" {
-				pollCount = 0
-			} else {
-				pollCount, err = strconv.ParseUint(to.Value, 10, 64)
-				if err != nil {
+			metric, err := a.repository.Get(m.Name, m.Type)
+			// ошибка отличается от "не найдено"
+			if err != nil {
+				if !errors.Is(err, storage.ErrNoRecords) {
 					return pollCount, err
 				}
+
+				metric = a.repository.New(m.Name, m.Type, "0")
+			}
+			defer a.repository.Release(metric)
+
+			pollCount, err = strconv.ParseUint(metric.Value, 10, 64)
+			if err != nil {
+				return pollCount, fmt.Errorf("customMetricsDefinition: parse string %s error %w", metric.Value, err)
 			}
 
-			return pollCount + 1, nil
+			pollCount++
+
+			return pollCount, nil
 		},
 	},
 	{
@@ -213,10 +220,8 @@ type VirtualMemoryMetric struct {
 	generateValue func(*mem.VirtualMemoryStat) uint64
 }
 
-func (c VirtualMemoryMetric) fromStore(s storage.Storage, target *models.Metric) error {
-	target.Type = c.Type
-	target.Name = c.Name
-	return s.Get(target)
+func (c VirtualMemoryMetric) Load(rep *MetricsRepository) (*models.Metric, error) {
+	return rep.Get(c.Name, c.Type)
 }
 
 var virtualMemoryMetricsDefinition = []VirtualMemoryMetric{
@@ -236,10 +241,8 @@ type CPUMetric struct {
 	generateValue func([]cpu.InfoStat) int32
 }
 
-func (c CPUMetric) fromStore(s storage.Storage, target *models.Metric) error {
-	target.Type = c.Type
-	target.Name = c.Name
-	return s.Get(target)
+func (c CPUMetric) Load(rep *MetricsRepository) (*models.Metric, error) {
+	return rep.Get(c.Name, c.Type)
 }
 
 var cpuMetricsDefinition = []CPUMetric{

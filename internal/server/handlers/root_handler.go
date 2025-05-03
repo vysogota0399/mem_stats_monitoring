@@ -1,57 +1,76 @@
 package handlers
 
 import (
+	"context"
+	"embed"
+	"fmt"
+	"html/template"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/server"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/repositories"
-	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
-	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
 )
 
+type RootCounterRepository interface {
+	All(ctx context.Context) ([]models.Counter, error)
+}
+
+type RootGaugeRepository interface {
+	All(ctx context.Context) ([]models.Gauge, error)
+}
+
+var _ RootCounterRepository = (*repositories.CounterRepository)(nil)
+var _ RootGaugeRepository = (*repositories.GaugeRepository)(nil)
+
 type RootHandler struct {
-	storage storage.Storage
-	lg      *logging.ZapLogger
+	counter RootCounterRepository
+	gauge   RootGaugeRepository
 }
 
-func NewRootHandler(strg storage.Storage, lg *logging.ZapLogger) gin.HandlerFunc {
-	return RootHandlerFunc(
-		&RootHandler{
-			storage: strg,
-			lg:      lg,
-		},
-	)
+func NewRootHandler(counter RootCounterRepository, gauge RootGaugeRepository) *RootHandler {
+	return &RootHandler{
+		counter: counter,
+		gauge:   gauge,
+	}
 }
 
-func RootHandlerFunc(h *RootHandler) gin.HandlerFunc {
+//go:embed templates
+var rootHandlerTemplates embed.FS
+
+func (h *RootHandler) Registrate() (server.Route, error) {
+	tmp := template.New("root")
+	if _, err := tmp.ParseFS(rootHandlerTemplates, "templates/root/index.tmpl"); err != nil {
+		return server.Route{}, fmt.Errorf("root_handler: parse fs error %w", err)
+	}
+
+	return server.Route{
+		Path:          "/",
+		Method:        "GET",
+		Handler:       h.handler(),
+		HTMLTemplates: []*template.Template{tmp},
+	}, nil
+}
+
+func (h *RootHandler) handler() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		counterRep := repositories.NewCounter(h.storage, h.lg)
-		gaugeRep := repositories.NewGauge(h.storage, h.lg)
-		counterRecords := make([]models.Counter, 0)
-		gaugeRecords := make([]models.Gauge, 0)
-
-		for _, values := range counterRep.All() {
-			count := len(values)
-			if count == 0 {
-				continue
-			}
-
-			counterRecords = append(counterRecords, values[count-1])
+		ctx := c.Request.Context()
+		gauge, err := h.gauge.All(ctx)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
 		}
 
-		for _, values := range gaugeRep.All() {
-			count := len(values)
-			if count == 0 {
-				continue
-			}
-
-			gaugeRecords = append(gaugeRecords, values[count-1])
+		counter, err := h.counter.All(ctx)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
 		}
 
 		c.HTML(http.StatusOK, "index.tmpl", gin.H{
-			"gauge":   gaugeRecords,
-			"counter": counterRecords,
+			"gauge":   gauge,
+			"counter": counter,
 		})
 	}
 }

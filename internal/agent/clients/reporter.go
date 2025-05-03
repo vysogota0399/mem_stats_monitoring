@@ -17,6 +17,7 @@ import (
 
 	"github.com/mailru/easyjson"
 	uuid "github.com/satori/go.uuid"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/agent"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/config"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
@@ -36,13 +37,16 @@ type Requester interface {
 
 // Reporter handles the communication with the metrics server
 type Reporter struct {
-	client      Requester
-	address     string
-	lg          *logging.ZapLogger
-	compressor  compressor
-	maxAttempts uint8
-	secretKey   []byte
-	semaphore   *semaphore
+	client        Requester
+	address       string
+	lg            *logging.ZapLogger
+	compressor    compressor
+	maxAttempts   uint8
+	secretKey     []byte
+	semaphore     *semaphore
+	publicKeyPath io.Reader
+	encryptor     Encryptor
+	repository    *agent.MetricsRepository
 }
 
 // NewReporter creates a new Reporter instance with basic configuration
@@ -51,7 +55,7 @@ func NewReporter(address string, lg *logging.ZapLogger, client Requester) *Repor
 		address:     address,
 		client:      client,
 		lg:          lg,
-		maxAttempts: 5,
+		maxAttempts: 2,
 	}
 }
 
@@ -77,29 +81,41 @@ func NewSemaphore(maxReq int) *semaphore {
 	}
 }
 
+type Encryptor interface {
+	Encrypt(b []byte) (string, error)
+}
+
 // NewCompReporter creates a new Reporter instance with compression and rate limiting
-func NewCompReporter(address string, lg *logging.ZapLogger, cfg *config.Config, client Requester) *Reporter {
-	return &Reporter{
-		address:     address,
-		client:      client,
-		lg:          lg,
-		compressor:  gzbody,
-		maxAttempts: cfg.MaxAttempts,
-		secretKey:   []byte(cfg.Key),
-		semaphore:   NewSemaphore(cfg.RateLimit),
+func NewCompReporter(address string, lg *logging.ZapLogger, cfg *config.Config, client Requester, repository *agent.MetricsRepository) *Reporter {
+	reporter := &Reporter{
+		address:       address,
+		client:        client,
+		lg:            lg,
+		compressor:    gzbody,
+		maxAttempts:   cfg.MaxAttempts,
+		secretKey:     []byte(cfg.Key),
+		semaphore:     NewSemaphore(cfg.RateLimit),
+		publicKeyPath: cfg.HTTPCert,
+		repository:    repository,
 	}
+
+	if cfg.HTTPCert != nil {
+		reporter.encryptor = crypto.NewEncryptor(cfg.HTTPCert)
+	}
+
+	return reporter
 }
 
 // UpdateMetric sends a single metric update to the server
 func (c *Reporter) UpdateMetric(ctx context.Context, mType, mName, value string) error {
-	ctx = c.lg.WithContextFields(ctx, zap.String("name", "http"))
+	reqCtx := c.lg.WithContextFields(ctx, zap.String("name", "http"))
+	reqCtx = context.WithoutCancel(reqCtx)
 	body, err := c.prepareBody(mType, mName, value)
 	if err != nil {
 		return err
 	}
 
-	req, err := http.NewRequestWithContext(
-		ctx,
+	req, err := http.NewRequest(
 		"POST", fmt.Sprintf("%s/update/", c.address),
 		body,
 	)
@@ -111,15 +127,18 @@ func (c *Reporter) UpdateMetric(ctx context.Context, mType, mName, value string)
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("X-Request-ID", uuid.NewV4().String())
 
-	resp, err := c.requestDo(ctx, req)
+	resp, err := c.processRequest(reqCtx, req)
+	defer func() {
+		if resp != nil {
+			if closeErr := resp.Body.Close(); err != nil {
+				c.lg.ErrorCtx(reqCtx, "close body erorr", zap.Error(closeErr))
+			}
+		}
+	}()
+
 	if err != nil {
 		return fmt.Errorf("internal/agent/clients/reporter: send request err: %w", err)
 	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			c.lg.ErrorCtx(ctx, "failed to close response body", zap.Error(err))
-		}
-	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return ErrUnsuccessfulResponse
@@ -130,14 +149,18 @@ func (c *Reporter) UpdateMetric(ctx context.Context, mType, mName, value string)
 
 // UpdateMetrics sends a batch of metric updates to the server
 func (c *Reporter) UpdateMetrics(ctx context.Context, data []*models.Metric) error {
+	reqCtx := c.lg.WithContextFields(ctx, zap.String("name", "http"))
+	reqCtx = context.WithoutCancel(reqCtx)
+
 	metricsBody := make([]MetricsBody, 0, len(data))
 	for _, m := range data {
-		rec, err := generateMetric(m.Type, m.Name, m.Value)
+		name, mType, value := c.repository.SafeRead(m)
+		rec, err := generateMetric(mType, name, value)
 		if err != nil {
-			return err
+			return fmt.Errorf("internal/agent/clients/reporter: generate metric %+v error %w", m, err)
 		}
 
-		metricsBody = append(metricsBody, *rec)
+		metricsBody = append(metricsBody, rec)
 	}
 
 	var body bytes.Buffer
@@ -146,8 +169,7 @@ func (c *Reporter) UpdateMetrics(ctx context.Context, data []*models.Metric) err
 		return err
 	}
 
-	req, err := http.NewRequestWithContext(
-		ctx,
+	req, err := http.NewRequest(
 		"POST", fmt.Sprintf("%s/updates/", c.address),
 		&body,
 	)
@@ -157,15 +179,18 @@ func (c *Reporter) UpdateMetrics(ctx context.Context, data []*models.Metric) err
 
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("X-Request-ID", uuid.NewV4().String())
-	resp, err := c.requestDo(ctx, req)
+	resp, err := c.processRequest(reqCtx, req)
+	defer func() {
+		if resp != nil {
+			if closeErr := resp.Body.Close(); err != nil {
+				c.lg.ErrorCtx(reqCtx, "close body erorr", zap.Error(closeErr))
+			}
+		}
+	}()
+
 	if err != nil {
 		return fmt.Errorf("internal/agent/clients/reporter: send request err: %w", err)
 	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			c.lg.ErrorCtx(ctx, "failed to close response body", zap.Error(err))
-		}
-	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return ErrUnsuccessfulResponse
@@ -174,15 +199,15 @@ func (c *Reporter) UpdateMetrics(ctx context.Context, data []*models.Metric) err
 	return nil
 }
 
-func generateMetric(mType, mName, mValue string) (*MetricsBody, error) {
-	rec := &MetricsBody{MName: mName, MType: mType}
+func generateMetric(mType, mName, mValue string) (MetricsBody, error) {
+	rec := MetricsBody{MName: mName, MType: mType}
 	switch mType {
 	case models.GaugeType:
 		rec.Value = mValue
 	case models.CounterType:
 		rec.Delta = mValue
 	default:
-		return nil, fmt.Errorf("internal/agent/clients/reporter.go: underfined type: %s, for name: %s, value: %s", mType, mName, mValue)
+		return MetricsBody{}, fmt.Errorf("internal/agent/clients/reporter.go: underfined type: %s, for name: %s, value: %s", mType, mName, mValue)
 	}
 
 	return rec, nil
@@ -192,82 +217,81 @@ type bodyKey string
 
 var bKey bodyKey = "body"
 
-func (c *Reporter) requestDo(ctx context.Context, req *http.Request) (*http.Response, error) {
-	resCh := make(chan *http.Response, c.maxAttempts)
-	errCh := make(chan error)
-	defer close(resCh)
-	defer close(errCh)
-
-	doRequest := func(ctx context.Context, req *http.Request, resChan chan *http.Response, errChan chan error) {
+func (c *Reporter) doRequest(ctx context.Context, req *http.Request) (*http.Response, error) {
+	request := func() (*http.Response, error) {
 		c.semaphore.Acquire()
 		defer c.semaphore.Release()
 
-		start := time.Now()
-		reader, readerErr := req.GetBody()
-		if readerErr != nil {
-			errChan <- fmt.Errorf("internal/agent/clients/reporter get body reader error %w", readerErr)
-			return
+		resp, err := c.client.Request(req)
+		if err != nil {
+			return nil, fmt.Errorf("reporter: request failed error %w", err)
 		}
 
-		buff := bytes.Buffer{}
-		if _, copyErr := io.Copy(&buff, reader); copyErr != nil {
-			errChan <- fmt.Errorf("internal/agent/clients/reporter read body error %w", copyErr)
-			return
+		if err := resp.Body.Close(); err != nil {
+			return nil, fmt.Errorf("reporter: response body close error %w", err)
 		}
 
-		ctx = context.WithValue(ctx, bKey, buff.Bytes())
+		return resp, nil
+	}
 
-		if signErr := c.signRequest(ctx, req); signErr != nil {
-			errChan <- fmt.Errorf("internal/agent/clients/reporter sign request error %w", signErr)
-			return
+	var (
+		resp *http.Response
+		err  error
+	)
+	for i := range c.maxAttempts {
+		c.lg.DebugCtx(ctx, "request", zap.Uint8("attempt", i+1), zap.Uint16("limit", uint16(c.maxAttempts)))
+		resp, err = request()
+		if err == nil {
+			return resp, nil
 		}
 
-		resp, reqErr := c.client.Request(req)
-		if reqErr != nil {
-			errChan <- fmt.Errorf("internal/agent/clients/reporter send request error %w", reqErr)
-			return
+		if i == c.maxAttempts-1 {
+			break
 		}
-		defer func() {
-			if err := resp.Body.Close(); err != nil {
-				c.lg.ErrorCtx(ctx, "failed to close response body", zap.Error(err))
-			}
-		}()
 
-		c.lg.DebugCtx(ctx,
-			"request",
-			zap.String("method", req.Method),
-			zap.String("url", req.URL.String()),
-			zap.String("body", buff.String()),
-			zap.Duration("duration", time.Since(start)),
-			zap.String("status", resp.Status),
-			zap.Any("headers", req.Header),
+		del := attemptDelay(i)
+		runNext := time.Now().Add(del).Format(time.RFC3339Nano)
+		c.lg.DebugCtx(
+			ctx,
+			"request failed",
+			zap.Uint8("attempt", i+1),
+			zap.Uint16("limit", uint16(c.maxAttempts)),
+			zap.String("run next", runNext),
 		)
-
-		resChan <- resp
+		time.Sleep(del)
 	}
 
-	var err error
+	return nil, fmt.Errorf("reporter: request max attempts exceeded errpr %w", err)
+}
 
-	for i := uint8(0); i < c.maxAttempts; i++ {
-		go doRequest(ctx, req, resCh, errCh)
+func (c *Reporter) processRequest(ctx context.Context, req *http.Request) (*http.Response, error) {
+	buff := bytes.Buffer{}
 
-		select {
-		case <-ctx.Done():
-			return nil, fmt.Errorf("internal/agent/clients/reporter context canceled")
-		case res := <-resCh:
-			return res, nil
-		case err = <-errCh:
-			if i >= c.maxAttempts-1 {
-				return nil, err
-			}
-
-			c.lg.DebugCtx(ctx, "wait next", zap.Int("total", int(c.maxAttempts)), zap.Int("current", int(i+1)))
-			time.Sleep(time.Duration(utils.Delay(uint8(i))) * time.Second)
-			go doRequest(ctx, req, resCh, errCh)
-		}
+	reader, readerErr := req.GetBody()
+	if readerErr != nil {
+		return nil, fmt.Errorf("internal/agent/clients/reporter read body error %w", readerErr)
 	}
 
-	return nil, err
+	if _, copyErr := io.Copy(&buff, reader); copyErr != nil {
+		return nil, fmt.Errorf("internal/agent/clients/reporter read body error %w", copyErr)
+	}
+
+	reqCtx := context.WithValue(ctx, bKey, buff.Bytes())
+
+	if signErr := c.signRequest(reqCtx, req); signErr != nil {
+		return nil, fmt.Errorf("internal/agent/clients/reporter sign request error %w", signErr)
+	}
+
+	if encErr := c.encryptRequest(reqCtx, req); encErr != nil {
+		return nil, fmt.Errorf("internal/agent/clients/reporter encrypt request error %w", encErr)
+	}
+
+	resp, reqErr := c.doRequest(reqCtx, req)
+	if reqErr != nil {
+		return nil, fmt.Errorf("internal/agent/clients/reporter send request error %w", reqErr)
+	}
+
+	return resp, nil
 }
 
 var ErrBodyKeyNotFoundInContext error = fmt.Errorf("internal/agent/clients/reporter.go there is no key %s in current context", bKey)
@@ -293,6 +317,26 @@ func (c *Reporter) signRequest(ctx context.Context, r *http.Request) error {
 	return nil
 }
 
+func (c *Reporter) encryptRequest(ctx context.Context, r *http.Request) error {
+	if c.encryptor == nil {
+		return nil
+	}
+
+	b, ok := ctx.Value(bKey).([]byte)
+	if !ok {
+		return ErrBodyKeyNotFoundInContext
+	}
+
+	encrypted, err := c.encryptor.Encrypt(b)
+	if err != nil {
+		return fmt.Errorf("internal/agent/clients/reporter encrypt request error %w", err)
+	}
+
+	r.Body = io.NopCloser(bytes.NewBuffer([]byte(encrypted)))
+
+	return nil
+}
+
 // MetricsBody represents the structure of a metric in the request body
 type MetricsBody struct {
 	MName string `json:"id"`              // metric name
@@ -309,14 +353,8 @@ type MetricsBodyAlias struct {
 }
 
 func (m MetricsBody) MarshalJSON() ([]byte, error) {
-	aliasValue := struct {
-		MetricsBodyAlias
-		Delta int     `json:"delta,omitempty"` // metric value for counter type
-		Value float64 `json:"value,omitempty"` // metric value for gauge type
-	}{
-		MetricsBodyAlias: MetricsBodyAlias{
-			MetricsBody: m,
-		},
+	aliasValue := MetricsBodyAlias{
+		MetricsBody: m,
 	}
 
 	if m.Value != "" {
@@ -368,4 +406,10 @@ func gzbody(b *bytes.Buffer) (*bytes.Buffer, error) {
 	}
 
 	return res, nil
+}
+
+func attemptDelay(i uint8) time.Duration {
+	delay := int(utils.Delay(i) * 1000)
+
+	return time.Duration(delay) * time.Millisecond
 }

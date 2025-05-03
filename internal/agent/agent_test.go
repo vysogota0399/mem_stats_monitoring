@@ -9,26 +9,26 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/config"
-	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/mocks"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/storage"
+	mocks "github.com/vysogota0399/mem_stats_monitoring/internal/mocks/agent"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
-	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
 // TestNewAgent проверяет создание нового агента.
 func TestNewAgent(t *testing.T) {
-	logger, err := logging.MustZapLogger(-1)
+	logger, err := logging.MustZapLogger(&config.Config{LogLevel: 0})
 	assert.NoError(t, err)
 	store := storage.NewMemoryStorage(logger)
-	cfg, err := config.NewConfig()
+	rep := NewMetricsRepository(store)
+	cfg, err := config.NewConfig(nil)
 	assert.NoError(t, err)
 
-	agent := NewAgent(logger, cfg, store)
+	agent := NewAgent(logger, cfg, rep, nil)
 	assert.NotNil(t, agent)
 	assert.Equal(t, logger, agent.lg)
-	assert.Equal(t, store, agent.storage)
+	assert.Equal(t, rep, agent.repository)
 	assert.Equal(t, cfg, agent.cfg)
 }
 
@@ -36,17 +36,18 @@ func TestNewAgent(t *testing.T) {
 func TestRunPollerPipe(t *testing.T) {
 	t.Parallel()
 
-	logger, err := logging.MustZapLogger(-1)
+	logger, err := logging.MustZapLogger(&config.Config{LogLevel: 0})
 	require.NoError(t, err)
 
 	store := storage.NewMemoryStorage(logger)
+	rep := NewMetricsRepository(store)
 	cfg := config.Config{
 		PollInterval:   time.Millisecond * 900,
 		ReportInterval: time.Millisecond * 900,
 	}
 	assert.NoError(t, err)
 
-	agent := NewAgent(logger, cfg, store)
+	agent := NewAgent(logger, cfg, rep, nil)
 	ctx := context.Background()
 
 	err = agent.runPollerPipe(ctx)
@@ -58,14 +59,16 @@ func TestRunPollerPipe(t *testing.T) {
 func TestGenMetrics(t *testing.T) {
 	t.Parallel()
 
-	logger, err := logging.MustZapLogger(-1)
+	logger, err := logging.MustZapLogger(&config.Config{LogLevel: 0})
 	assert.NoError(t, err)
 
 	store := storage.NewMemoryStorage(logger)
-	cfg, err := config.NewConfig()
+	rep := NewMetricsRepository(store)
+
+	cfg, err := config.NewConfig(nil)
 	assert.NoError(t, err)
 
-	agent := NewAgent(logger, cfg, store)
+	agent := NewAgent(logger, cfg, rep, nil)
 	ctx := context.Background()
 
 	metricsChan := agent.genMetrics(ctx, &errgroup.Group{})
@@ -91,14 +94,15 @@ func TestGenMetrics(t *testing.T) {
 func TestSaveMetrics(t *testing.T) {
 	t.Parallel()
 
-	logger, err := logging.MustZapLogger(-1)
+	logger, err := logging.MustZapLogger(&config.Config{LogLevel: 0})
 	require.NoError(t, err)
 
 	store := storage.NewMemoryStorage(logger)
+	rep := NewMetricsRepository(store)
 	cfg := config.Config{}
 	assert.NoError(t, err)
 
-	agent := NewAgent(logger, cfg, store)
+	agent := NewAgent(logger, cfg, rep, nil)
 
 	metricsChan := make(chan *models.Metric, 10)
 	errg, ctx := errgroup.WithContext(context.Background())
@@ -196,19 +200,18 @@ func TestAgent_Start(t *testing.T) {
 			}
 
 			mockClient := mocks.NewMockHttpClient(ctrl)
-			lg, err := logging.MustZapLogger(zap.DebugLevel)
+			lg, err := logging.MustZapLogger(&config.Config{LogLevel: 0})
 			assert.NoError(t, err)
 
 			agent := &Agent{
 				lg:                   lg,
-				storage:              storage.NewMemoryStorage(lg),
+				repository:           NewMetricsRepository(storage.NewMemoryStorage(lg)),
 				cfg:                  cfg,
-				httpClient:           mockClient,
+				reporter:             mockClient,
 				runtimeMetrics:       runtimeMetricsDefinition,
 				customMetrics:        customMetricsDefinition,
 				virtualMemoryMetrics: virtualMemoryMetricsDefinition,
 				cpuMetrics:           cpuMetricsDefinition,
-				metricsPool:          NewMetricsPool(),
 			}
 
 			ctx, cancel := tt.setup(mockClient)

@@ -5,6 +5,7 @@ import (
 	"log"
 	"strings"
 
+	"github.com/vysogota0399/mem_stats_monitoring/internal/server/config"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -33,9 +34,28 @@ type ZapLogger struct {
 	level  zap.AtomicLevel
 }
 
+func NewZapLogger(cfg *config.Config) (*ZapLogger, error) {
+	atomic := zap.NewAtomicLevelAt(zapcore.Level(cfg.LogLevel))
+	settings := defaultSettings(atomic)
+
+	l, err := settings.config.Build(settings.opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ZapLogger{
+		logger: l,
+		level:  atomic,
+	}, nil
+}
+
+type LogLevelFetcher interface {
+	LLevel() zapcore.Level
+}
+
 // MustZapLogger returns a new ZapLogger configured with the provided options.
-func MustZapLogger(level zapcore.Level) (*ZapLogger, error) {
-	atomic := zap.NewAtomicLevelAt(level)
+func MustZapLogger(cfg LogLevelFetcher) (*ZapLogger, error) {
+	atomic := zap.NewAtomicLevelAt(cfg.LLevel())
 	settings := defaultSettings(atomic)
 
 	l, err := settings.config.Build(settings.opts...)

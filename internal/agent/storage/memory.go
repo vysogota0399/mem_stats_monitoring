@@ -19,7 +19,7 @@ type Storage interface {
 
 type Memory struct {
 	storage map[string]map[string]string
-	mutex   sync.Mutex
+	mutex   sync.RWMutex
 	lg      *logging.ZapLogger
 }
 
@@ -29,7 +29,7 @@ func NewMemoryStorage(lg *logging.ZapLogger) *Memory {
 	return &Memory{
 		lg:      lg,
 		storage: storage,
-		mutex:   sync.Mutex{},
+		mutex:   sync.RWMutex{},
 	}
 }
 
@@ -48,11 +48,11 @@ func (s *Memory) Set(ctx context.Context, m *models.Metric) error {
 }
 
 func (s *Memory) Get(to *models.Metric) error {
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
+
 	mType := to.Type
 	mName := to.Name
-
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
 
 	mTypeStorage, ok := s.storage[mType]
 	if !ok {

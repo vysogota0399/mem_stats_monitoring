@@ -2,55 +2,91 @@ package handlers
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/server"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/repositories"
-	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storages"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
+	"go.uber.org/zap"
 )
 
-const gauge string = "gauge"
-const counter string = "counter"
+type IShowMetricGaugeRepository interface {
+	FindByName(ctx context.Context, name string) (models.Gauge, error)
+}
+
+type IShowMetricCounterRepository interface {
+	FindByName(ctx context.Context, name string) (models.Counter, error)
+}
+
+var _ IShowMetricGaugeRepository = (*repositories.GaugeRepository)(nil)
+var _ IShowMetricCounterRepository = (*repositories.CounterRepository)(nil)
 
 type ShowMetricHandler struct {
-	gaugeRepository   *repositories.Gauge
-	counterRepository *repositories.Counter
+	gaugeRepository   IShowMetricGaugeRepository
+	counterRepository IShowMetricCounterRepository
 	lg                *logging.ZapLogger
 }
 
-func NewShowMetricHandler(strg storage.Storage, lg *logging.ZapLogger) gin.HandlerFunc {
-	return showMetricHandlerFunc(
-		&ShowMetricHandler{
-			gaugeRepository:   repositories.NewGauge(strg, lg),
-			counterRepository: repositories.NewCounter(strg, lg),
-			lg:                lg,
-		},
-	)
+func NewShowMetricHandler(gaugeRepository IShowMetricGaugeRepository, counterRepository IShowMetricCounterRepository, lg *logging.ZapLogger) *ShowMetricHandler {
+	return &ShowMetricHandler{
+		gaugeRepository:   gaugeRepository,
+		counterRepository: counterRepository,
+		lg:                lg,
+	}
 }
 
-func showMetricHandlerFunc(h *ShowMetricHandler) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		record, err := h.fetchMetic(c, c.Param("type"), c.Param("name"))
+func (h *ShowMetricHandler) Registrate() (server.Route, error) {
+	return server.Route{
+		Path:    "/value/:type/:name",
+		Method:  "GET",
+		Handler: h.handler(),
+	}, nil
+}
 
-		if err != nil {
+func (h *ShowMetricHandler) handler() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx := utils.InitHandlerCtx(c, h.lg, "show_metric_handler")
+		mType := c.Param("type")
+		if mType != models.GaugeType && mType != models.CounterType {
+			h.lg.ErrorCtx(ctx, "invalid metric type", zap.String("type", mType))
 			c.AbortWithStatus(http.StatusNotFound)
 			return
 		}
 
-		result := record.StringValue()
-		c.String(http.StatusOK, result)
-	}
-}
+		switch mType {
+		case models.GaugeType:
+			record, err := h.gaugeRepository.FindByName(ctx, c.Param("name"))
+			if err != nil {
+				if errors.Is(err, storages.ErrNoRecords) {
+					c.AbortWithStatus(http.StatusNotFound)
+					return
+				}
 
-func (h *ShowMetricHandler) fetchMetic(c context.Context, mType, mName string) (models.Metricable, error) {
-	switch mType {
-	case gauge:
-		return h.gaugeRepository.Last(c, mName)
-	case counter:
-		return h.counterRepository.Last(c, mName)
+				h.lg.ErrorCtx(ctx, "failed to find gauge by name", zap.Error(err))
+				c.AbortWithStatus(http.StatusInternalServerError)
+				return
+			}
+
+			c.String(http.StatusOK, record.StringValue())
+		case models.CounterType:
+			record, err := h.counterRepository.FindByName(ctx, c.Param("name"))
+			if err != nil {
+				if errors.Is(err, storages.ErrNoRecords) {
+					c.AbortWithStatus(http.StatusNotFound)
+					return
+				}
+
+				h.lg.ErrorCtx(ctx, "failed to find counter by name", zap.Error(err))
+				c.AbortWithStatus(http.StatusInternalServerError)
+				return
+			}
+
+			c.String(http.StatusOK, record.StringValue())
+		}
 	}
-	return nil, fmt.Errorf("internal/server/handlers/show_metric_handler.go: fatch mType: %s, mName: %s error", mType, mName)
 }

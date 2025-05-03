@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/config"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
-	"go.uber.org/zap/zapcore"
 )
 
 func NewMemoryStorageWithData(storage map[string]map[string]string, lg *logging.ZapLogger) *Memory {
@@ -59,7 +59,7 @@ func TestGet(t *testing.T) {
 
 	for _, tt := range tasks {
 		t.Run(tt.name, func(t *testing.T) {
-			lg, _ := logging.MustZapLogger(zapcore.DebugLevel)
+			lg, _ := logging.MustZapLogger(&config.Config{LogLevel: 1})
 			storage := NewMemoryStorageWithData(tt.data, lg)
 			m := &models.Metric{
 				Type: tt.mType,
@@ -92,7 +92,7 @@ func TestSet(t *testing.T) {
 
 	for _, tt := range tasks {
 		t.Run(tt.name, func(t *testing.T) {
-			lg, _ := logging.MustZapLogger(zapcore.DebugLevel)
+			lg, _ := logging.MustZapLogger(&config.Config{LogLevel: 1})
 			storage := NewMemoryStorageWithData(tt.data, lg)
 			assert.NoError(t, storage.Set(context.Background(), &tt.val))
 

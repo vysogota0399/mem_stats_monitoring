@@ -27,6 +27,8 @@ vendor/
 .vscode
 .DS_Store
 
+server_config.json
+
 /.docker/server/.env
 /.docker/agent/.env
 
