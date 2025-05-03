@@ -46,7 +46,7 @@ func main() {
 		lg,
 		cfg,
 		rep,
-		clients.NewCompReporter(cfg.ServerURL, lg, &cfg, clients.NewDefaulut(), rep),
+		clients.NewCompReporter(cfg.ServerURL, lg, &cfg, clients.NewDefaulut(), clients.NewIpSetter(lg), rep),
 	)
 
 	agent.Start(ctx)

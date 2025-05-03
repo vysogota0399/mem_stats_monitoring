@@ -6,6 +6,6 @@ option go_package = "github.com/vysogota0399/mem_stats_monitoring/pkg/gen/servic
 
 import "pkg/proto/services/metrics/item.proto";
 
-message CreateMetricParams {
-  repeated Item items = 1;
+message UpdateMetricsBatchParams {
+  repeated Item item = 1;
 }

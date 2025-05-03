@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package services.metrics;
+
+option go_package = "github.com/vysogota0399/mem_stats_monitoring/pkg/gen/services/metrics";
+
+import "pkg/proto/entities/metric_types.proto";
+
+message ShowMetricParams {
+  string name = 1;
+  entities.MetricTypes m_type = 2;
+}
