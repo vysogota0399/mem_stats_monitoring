@@ -107,7 +107,7 @@ func (a *Agent) startPoller(ctx context.Context, wg *sync.WaitGroup) {
 }
 
 // startReporter launches a goroutine that periodically sends collected metrics to the server
-func (a Agent) startReporter(ctx context.Context, wg *sync.WaitGroup) {
+func (a *Agent) startReporter(ctx context.Context, wg *sync.WaitGroup) {
 	wg.Add(1)
 
 	go func() {

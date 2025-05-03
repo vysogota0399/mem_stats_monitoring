@@ -9,23 +9,25 @@ import (
 )
 
 type MetricsRepository struct {
-	mu      sync.Mutex
+	mu      sync.RWMutex
 	storage *storage.Memory
 	pool    MetricsPool
 }
 
 func NewMetricsRepository(st *storage.Memory) *MetricsRepository {
 	return &MetricsRepository{
-		mu:      sync.Mutex{},
+		mu:      sync.RWMutex{},
 		storage: st,
 		pool:    NewMetricsPool(),
 	}
 }
 
 func (r *MetricsRepository) Get(name, mtype string) (*models.Metric, error) {
-	m := r.pool.Get()
-	m.Type = mtype
-	m.Name = name
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	m := r.pool.Get(name, mtype, "")
+
 	err := r.storage.Get(m)
 	if err != nil {
 		r.pool.Put(m)
@@ -36,19 +38,34 @@ func (r *MetricsRepository) Get(name, mtype string) (*models.Metric, error) {
 }
 
 func (r *MetricsRepository) New(name, mtype, value string) *models.Metric {
-	m := r.pool.Get()
-	m.Name = name
-	m.Type = mtype
-	m.Value = value
-	return m
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return r.pool.Get(name, mtype, value)
 }
 
 func (r *MetricsRepository) Release(metrics ...*models.Metric) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	r.pool.Free(metrics)
 }
 
 func (r *MetricsRepository) SaveAndRelease(ctx context.Context, m *models.Metric) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	defer r.pool.Put(m)
 
 	return r.storage.Set(ctx, m)
+}
+
+func (r *MetricsRepository) SafeRead(m *models.Metric) (name, mtype, value string) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	name = m.Name
+	mtype = m.Type
+	value = m.Value
+	return
 }

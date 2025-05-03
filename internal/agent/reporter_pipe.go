@@ -121,7 +121,8 @@ func (a *Agent) report(
 	for m := range metrics {
 		g.Go(
 			func() error {
-				if err := a.reporter.UpdateMetric(ctx, m.Type, m.Name, m.Value); err != nil {
+				name, mtype, value := a.repository.SafeRead(m)
+				if err := a.reporter.UpdateMetric(ctx, mtype, name, value); err != nil {
 					a.repository.Release(m)
 					return fmt.Errorf("report_pipe: upload metric err %w", err)
 				}

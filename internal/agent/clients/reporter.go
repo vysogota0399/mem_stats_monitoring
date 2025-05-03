@@ -17,6 +17,7 @@ import (
 
 	"github.com/mailru/easyjson"
 	uuid "github.com/satori/go.uuid"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/agent"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/config"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
@@ -45,6 +46,7 @@ type Reporter struct {
 	semaphore     *semaphore
 	publicKeyPath io.Reader
 	encryptor     Encryptor
+	repository    *agent.MetricsRepository
 }
 
 // NewReporter creates a new Reporter instance with basic configuration
@@ -84,7 +86,7 @@ type Encryptor interface {
 }
 
 // NewCompReporter creates a new Reporter instance with compression and rate limiting
-func NewCompReporter(address string, lg *logging.ZapLogger, cfg *config.Config, client Requester) *Reporter {
+func NewCompReporter(address string, lg *logging.ZapLogger, cfg *config.Config, client Requester, repository *agent.MetricsRepository) *Reporter {
 	reporter := &Reporter{
 		address:       address,
 		client:        client,
@@ -94,6 +96,7 @@ func NewCompReporter(address string, lg *logging.ZapLogger, cfg *config.Config, 
 		secretKey:     []byte(cfg.Key),
 		semaphore:     NewSemaphore(cfg.RateLimit),
 		publicKeyPath: cfg.HTTPCert,
+		repository:    repository,
 	}
 
 	if cfg.HTTPCert != nil {
@@ -106,13 +109,13 @@ func NewCompReporter(address string, lg *logging.ZapLogger, cfg *config.Config, 
 // UpdateMetric sends a single metric update to the server
 func (c *Reporter) UpdateMetric(ctx context.Context, mType, mName, value string) error {
 	reqCtx := c.lg.WithContextFields(ctx, zap.String("name", "http"))
+	reqCtx = context.WithoutCancel(reqCtx)
 	body, err := c.prepareBody(mType, mName, value)
 	if err != nil {
 		return err
 	}
 
-	req, err := http.NewRequestWithContext(
-		ctx,
+	req, err := http.NewRequest(
 		"POST", fmt.Sprintf("%s/update/", c.address),
 		body,
 	)
@@ -125,6 +128,14 @@ func (c *Reporter) UpdateMetric(ctx context.Context, mType, mName, value string)
 	req.Header.Add("X-Request-ID", uuid.NewV4().String())
 
 	resp, err := c.processRequest(reqCtx, req)
+	defer func() {
+		if resp != nil {
+			if closeErr := resp.Body.Close(); err != nil {
+				c.lg.ErrorCtx(reqCtx, "close body erorr", zap.Error(closeErr))
+			}
+		}
+	}()
+
 	if err != nil {
 		return fmt.Errorf("internal/agent/clients/reporter: send request err: %w", err)
 	}
@@ -139,10 +150,12 @@ func (c *Reporter) UpdateMetric(ctx context.Context, mType, mName, value string)
 // UpdateMetrics sends a batch of metric updates to the server
 func (c *Reporter) UpdateMetrics(ctx context.Context, data []*models.Metric) error {
 	reqCtx := c.lg.WithContextFields(ctx, zap.String("name", "http"))
+	reqCtx = context.WithoutCancel(reqCtx)
 
 	metricsBody := make([]MetricsBody, 0, len(data))
 	for _, m := range data {
-		rec, err := generateMetric(m.Type, m.Name, m.Value)
+		name, mType, value := c.repository.SafeRead(m)
+		rec, err := generateMetric(mType, name, value)
 		if err != nil {
 			return fmt.Errorf("internal/agent/clients/reporter: generate metric %+v error %w", m, err)
 		}
@@ -156,8 +169,7 @@ func (c *Reporter) UpdateMetrics(ctx context.Context, data []*models.Metric) err
 		return err
 	}
 
-	req, err := http.NewRequestWithContext(
-		reqCtx,
+	req, err := http.NewRequest(
 		"POST", fmt.Sprintf("%s/updates/", c.address),
 		&body,
 	)
@@ -168,6 +180,14 @@ func (c *Reporter) UpdateMetrics(ctx context.Context, data []*models.Metric) err
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("X-Request-ID", uuid.NewV4().String())
 	resp, err := c.processRequest(reqCtx, req)
+	defer func() {
+		if resp != nil {
+			if closeErr := resp.Body.Close(); err != nil {
+				c.lg.ErrorCtx(reqCtx, "close body erorr", zap.Error(closeErr))
+			}
+		}
+	}()
+
 	if err != nil {
 		return fmt.Errorf("internal/agent/clients/reporter: send request err: %w", err)
 	}

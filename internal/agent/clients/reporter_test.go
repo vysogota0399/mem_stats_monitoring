@@ -13,8 +13,10 @@ import (
 	"github.com/brianvoe/gofakeit/v7"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/agent"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/config"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/models"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/storage"
 	mocks "github.com/vysogota0399/mem_stats_monitoring/internal/mocks/agent/clients"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
 )
@@ -30,7 +32,7 @@ func BenchmarkReporter_UpdateMetrics(b *testing.B) {
 	lg, err := logging.MustZapLogger(&config.Config{LogLevel: 2})
 	assert.NoError(b, err)
 
-	reporter := NewCompReporter("", lg, &config.Config{RateLimit: 10}, client)
+	reporter := NewCompReporter("", lg, &config.Config{RateLimit: 10}, client, agent.NewMetricsRepository(storage.NewMemoryStorage(nil)))
 	ctx := context.Background()
 
 	types := []string{models.CounterType, models.CounterType}
@@ -310,6 +312,7 @@ func TestReporter_UpdateMetric(t *testing.T) {
 					HTTPCert:    bytes.NewBuffer([]byte{}),
 				},
 				tt.fields.client,
+				agent.NewMetricsRepository(storage.NewMemoryStorage(nil)),
 			)
 
 			c.encryptor = tt.fields.encryptor
@@ -487,6 +490,7 @@ func TestReporter_UpdateMetrics(t *testing.T) {
 					MaxAttempts: tt.fields.maxAttempts,
 				},
 				tt.fields.client,
+				agent.NewMetricsRepository(storage.NewMemoryStorage(nil)),
 			)
 			c.encryptor = nil
 			err := c.UpdateMetrics(tt.args.ctx, tt.args.data)
