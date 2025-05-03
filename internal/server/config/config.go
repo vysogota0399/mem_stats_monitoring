@@ -31,6 +31,7 @@ type Config struct {
 	PrivateKey      io.Reader `json:"private_key_path"`
 	ConfigPath      string    `json:"config_path" env:"CONFIG" envDefault:""`
 	TrustedSubnet   string    `json:"trusted_subnet" env:"TRUSTED_SUBNET" envDefault:""`
+	GRPCPort        string    `json:"grpc_port" env:"GRPC_PORT", envDefault:":3200"`
 }
 
 func (c *Config) LLevel() zapcore.Level {

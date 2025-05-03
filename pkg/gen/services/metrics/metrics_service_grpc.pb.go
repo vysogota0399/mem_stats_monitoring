@@ -20,16 +20,22 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	MetricsService_Create_FullMethodName      = "/services.metrics.MetricsService/Create"
-	MetricsService_CreateBatch_FullMethodName = "/services.metrics.MetricsService/CreateBatch"
+	MetricsService_Update_FullMethodName      = "/services.metrics.MetricsService/Update"
+	MetricsService_UpdateBatch_FullMethodName = "/services.metrics.MetricsService/UpdateBatch"
+	MetricsService_Show_FullMethodName        = "/services.metrics.MetricsService/Show"
+	MetricsService_Index_FullMethodName       = "/services.metrics.MetricsService/Index"
+	MetricsService_Ping_FullMethodName        = "/services.metrics.MetricsService/Ping"
 )
 
 // MetricsServiceClient is the client API for MetricsService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type MetricsServiceClient interface {
-	Create(ctx context.Context, in *CreateMetricParams, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	CreateBatch(ctx context.Context, in *CreateMetricsBatchParams, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	Update(ctx context.Context, in *UpdateMetricParams, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	UpdateBatch(ctx context.Context, in *UpdateMetricsBatchParams, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	Show(ctx context.Context, in *ShowMetricParams, opts ...grpc.CallOption) (*ShowMetricResponse, error)
+	Index(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*IndexResponse, error)
+	Ping(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
 type metricsServiceClient struct {
@@ -40,20 +46,50 @@ func NewMetricsServiceClient(cc grpc.ClientConnInterface) MetricsServiceClient {
 	return &metricsServiceClient{cc}
 }
 
-func (c *metricsServiceClient) Create(ctx context.Context, in *CreateMetricParams, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+func (c *metricsServiceClient) Update(ctx context.Context, in *UpdateMetricParams, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, MetricsService_Create_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, MetricsService_Update_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *metricsServiceClient) CreateBatch(ctx context.Context, in *CreateMetricsBatchParams, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+func (c *metricsServiceClient) UpdateBatch(ctx context.Context, in *UpdateMetricsBatchParams, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, MetricsService_CreateBatch_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, MetricsService_UpdateBatch_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *metricsServiceClient) Show(ctx context.Context, in *ShowMetricParams, opts ...grpc.CallOption) (*ShowMetricResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ShowMetricResponse)
+	err := c.cc.Invoke(ctx, MetricsService_Show_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *metricsServiceClient) Index(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*IndexResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(IndexResponse)
+	err := c.cc.Invoke(ctx, MetricsService_Index_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *metricsServiceClient) Ping(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, MetricsService_Ping_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -64,8 +100,11 @@ func (c *metricsServiceClient) CreateBatch(ctx context.Context, in *CreateMetric
 // All implementations must embed UnimplementedMetricsServiceServer
 // for forward compatibility.
 type MetricsServiceServer interface {
-	Create(context.Context, *CreateMetricParams) (*emptypb.Empty, error)
-	CreateBatch(context.Context, *CreateMetricsBatchParams) (*emptypb.Empty, error)
+	Update(context.Context, *UpdateMetricParams) (*emptypb.Empty, error)
+	UpdateBatch(context.Context, *UpdateMetricsBatchParams) (*emptypb.Empty, error)
+	Show(context.Context, *ShowMetricParams) (*ShowMetricResponse, error)
+	Index(context.Context, *emptypb.Empty) (*IndexResponse, error)
+	Ping(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
 	mustEmbedUnimplementedMetricsServiceServer()
 }
 
@@ -76,11 +115,20 @@ type MetricsServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedMetricsServiceServer struct{}
 
-func (UnimplementedMetricsServiceServer) Create(context.Context, *CreateMetricParams) (*emptypb.Empty, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Create not implemented")
+func (UnimplementedMetricsServiceServer) Update(context.Context, *UpdateMetricParams) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Update not implemented")
 }
-func (UnimplementedMetricsServiceServer) CreateBatch(context.Context, *CreateMetricsBatchParams) (*emptypb.Empty, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method CreateBatch not implemented")
+func (UnimplementedMetricsServiceServer) UpdateBatch(context.Context, *UpdateMetricsBatchParams) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateBatch not implemented")
+}
+func (UnimplementedMetricsServiceServer) Show(context.Context, *ShowMetricParams) (*ShowMetricResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Show not implemented")
+}
+func (UnimplementedMetricsServiceServer) Index(context.Context, *emptypb.Empty) (*IndexResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Index not implemented")
+}
+func (UnimplementedMetricsServiceServer) Ping(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Ping not implemented")
 }
 func (UnimplementedMetricsServiceServer) mustEmbedUnimplementedMetricsServiceServer() {}
 func (UnimplementedMetricsServiceServer) testEmbeddedByValue()                        {}
@@ -103,38 +151,92 @@ func RegisterMetricsServiceServer(s grpc.ServiceRegistrar, srv MetricsServiceSer
 	s.RegisterService(&MetricsService_ServiceDesc, srv)
 }
 
-func _MetricsService_Create_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CreateMetricParams)
+func _MetricsService_Update_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateMetricParams)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MetricsServiceServer).Create(ctx, in)
+		return srv.(MetricsServiceServer).Update(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: MetricsService_Create_FullMethodName,
+		FullMethod: MetricsService_Update_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MetricsServiceServer).Create(ctx, req.(*CreateMetricParams))
+		return srv.(MetricsServiceServer).Update(ctx, req.(*UpdateMetricParams))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _MetricsService_CreateBatch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CreateMetricsBatchParams)
+func _MetricsService_UpdateBatch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateMetricsBatchParams)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MetricsServiceServer).CreateBatch(ctx, in)
+		return srv.(MetricsServiceServer).UpdateBatch(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: MetricsService_CreateBatch_FullMethodName,
+		FullMethod: MetricsService_UpdateBatch_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MetricsServiceServer).CreateBatch(ctx, req.(*CreateMetricsBatchParams))
+		return srv.(MetricsServiceServer).UpdateBatch(ctx, req.(*UpdateMetricsBatchParams))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MetricsService_Show_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ShowMetricParams)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MetricsServiceServer).Show(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MetricsService_Show_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MetricsServiceServer).Show(ctx, req.(*ShowMetricParams))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MetricsService_Index_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MetricsServiceServer).Index(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MetricsService_Index_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MetricsServiceServer).Index(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MetricsService_Ping_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MetricsServiceServer).Ping(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MetricsService_Ping_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MetricsServiceServer).Ping(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -147,12 +249,24 @@ var MetricsService_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*MetricsServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "Create",
-			Handler:    _MetricsService_Create_Handler,
+			MethodName: "Update",
+			Handler:    _MetricsService_Update_Handler,
 		},
 		{
-			MethodName: "CreateBatch",
-			Handler:    _MetricsService_CreateBatch_Handler,
+			MethodName: "UpdateBatch",
+			Handler:    _MetricsService_UpdateBatch_Handler,
+		},
+		{
+			MethodName: "Show",
+			Handler:    _MetricsService_Show_Handler,
+		},
+		{
+			MethodName: "Index",
+			Handler:    _MetricsService_Index_Handler,
+		},
+		{
+			MethodName: "Ping",
+			Handler:    _MetricsService_Ping_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

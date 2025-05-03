@@ -5,6 +5,6 @@ package entities;
 option go_package = "github.com/vysogota0399/mem_stats_monitoring/pkg/gen/entities";
 
 message Counter {
-  float value = 1;
+  int64 value = 1;
   string name = 2;
 }

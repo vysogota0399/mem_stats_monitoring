@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/config"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/server/grpc"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/handlers"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/repositories"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/service"
@@ -30,6 +31,7 @@ func CreateApp() fx.Option {
 			logging.NewZapLogger,
 
 			server.NewHTTPServer,
+			grpc.NewServer,
 
 			fx.Annotate(crypto.NewDecryptor, fx.As(new(server.Decrypter))),
 			fx.Annotate(config.NewFileConfig, fx.As(new(config.FileConfigurer))),
@@ -69,10 +71,12 @@ func CreateApp() fx.Option {
 			AsHandlers(handlers.NewUpdatesRestMetricsHandler),
 		),
 		fx.Invoke(startHTTPServer),
+		fx.Invoke(startGRPCServer),
 	)
 }
 
 func startHTTPServer(*server.HTTPServer) {}
+func startGRPCServer(*grpc.Server)       {}
 
 func AsHandlers(f any, ants ...fx.Annotation) any {
 	ants = append(ants, fx.ResultTags(`group:"handlers"`))

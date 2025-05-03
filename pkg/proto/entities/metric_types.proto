@@ -4,7 +4,7 @@ package entities;
 
 option go_package = "github.com/vysogota0399/mem_stats_monitoring/pkg/gen/entities";
 
-message Gauge {
-  double value = 1;
-  string name = 2;
+enum MetricTypes {
+  COUNTER = 0;
+  GAUGE = 1;
 }
