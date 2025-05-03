@@ -27,7 +27,7 @@ type Config struct {
 	Key            string        `json:"key" env:"KEY"`
 	RateLimit      int           `json:"rate_limit" env:"RATE_LIMIT"`
 	ProfileAddress string        `json:"profile_address" env:"PROFILE_ADDRESS"`
-	MaxAttempts    uint8         `json:"max_attempts" env:"MAX_ATTEMPTS" envDefault:"5"`
+	MaxAttempts    uint8         `json:"max_attempts" env:"MAX_ATTEMPTS" envDefault:"2"`
 	HTTPCert       io.Reader     `json:"crypto_key" env:"CRYPTO_KEY"`
 	ConfigPath     string        `json:"config_path" env:"CONFIG" envDefault:""`
 }
@@ -95,7 +95,7 @@ func NewConfig(f FileConfigurer) (Config, error) {
 		}
 		c.MaxAttempts = uint8(maxAttempts)
 	} else {
-		c.MaxAttempts = 5
+		c.MaxAttempts = 2
 	}
 
 	c.ServerURL = fmt.Sprintf("http://%s", c.ServerURL)

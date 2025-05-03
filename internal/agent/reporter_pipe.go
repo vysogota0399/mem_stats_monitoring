@@ -2,13 +2,11 @@ package agent
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 
 	uuid "github.com/satori/go.uuid"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/models"
-	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/storage"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -17,9 +15,6 @@ import (
 // 1. Loads metrics from storage
 // 2. Sends metrics to the server
 func (a *Agent) runReporterPipe(ctx context.Context) {
-	a.reporterPipeLock.Lock()
-	defer a.reporterPipeLock.Unlock()
-
 	operationID := uuid.NewV4()
 	ctx = a.lg.WithContextFields(ctx, zap.String("operation_id", operationID.String()))
 
@@ -105,14 +100,12 @@ func (a *Agent) load(
 	r Reportable,
 	b chan *models.Metric,
 ) error {
-	m := a.metricsPool.Get()
-	if err := r.fromStore(a.storage, m); err != nil && !errors.Is(err, storage.ErrNoRecords) {
-		a.metricsPool.Put(m)
-		return fmt.Errorf("internal/agent/reporter_pipe load from storage error %w", err)
+	m, err := r.Load(a.repository)
+	if err != nil {
+		return fmt.Errorf("reporter_pipe: load metric %+v error %w", m, err)
 	}
 
 	b <- m
-
 	return nil
 }
 
@@ -129,7 +122,7 @@ func (a *Agent) report(
 		g.Go(
 			func() error {
 				if err := a.reporter.UpdateMetric(ctx, m.Type, m.Name, m.Value); err != nil {
-					a.metricsPool.Put(m)
+					a.repository.Release(m)
 					return fmt.Errorf("report_pipe: upload metric err %w", err)
 				}
 
@@ -148,7 +141,7 @@ func (a *Agent) report(
 
 	g.Go(
 		func() error {
-			defer a.metricsPool.Free(batch)
+			defer a.repository.Release(batch...)
 			if err := a.reporter.UpdateMetrics(ctx, batch); err != nil {
 				return fmt.Errorf("reporter_pipe: update batch metrics failed error %w", err)
 			}

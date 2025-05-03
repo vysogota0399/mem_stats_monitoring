@@ -11,7 +11,6 @@ import (
 
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/config"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/models"
-	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/storage"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
 	"go.uber.org/zap"
 )
@@ -25,30 +24,28 @@ type Adapter interface {
 // Agent handles the collection and reporting of system metrics
 type Agent struct {
 	lg                   *logging.ZapLogger
-	storage              storage.Storage
 	cfg                  config.Config
 	reporter             Adapter
 	runtimeMetrics       []RuntimeMetric
-	customMetrics        []CustomMetric
+	customMetrics        []*CustomMetric
 	virtualMemoryMetrics []VirtualMemoryMetric
 	cpuMetrics           []CPUMetric
-	metricsPool          *MetricsPool
 	reporterPipeLock     sync.Mutex
+	repository           *MetricsRepository
 }
 
 // NewAgent creates a new Agent instance with the specified configuration
-func NewAgent(lg *logging.ZapLogger, cfg config.Config, store storage.Storage, rep Adapter) *Agent {
+func NewAgent(lg *logging.ZapLogger, cfg config.Config, rep *MetricsRepository, adaper Adapter) *Agent {
 	return &Agent{
 		lg:                   lg,
-		storage:              store,
 		cfg:                  cfg,
-		reporter:             rep,
+		reporter:             adaper,
 		runtimeMetrics:       runtimeMetricsDefinition,
 		customMetrics:        customMetricsDefinition,
 		virtualMemoryMetrics: virtualMemoryMetricsDefinition,
 		cpuMetrics:           cpuMetricsDefinition,
-		metricsPool:          NewMetricsPool(),
 		reporterPipeLock:     sync.Mutex{},
+		repository:           rep,
 	}
 }
 

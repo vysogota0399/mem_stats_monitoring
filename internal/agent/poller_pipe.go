@@ -39,12 +39,8 @@ func (a *Agent) saveMetrics(ctx context.Context, g *errgroup.Group, metrics <-ch
 				case <-ctx.Done():
 					return nil
 				default:
-					if err := a.storage.Set(ctx, m); err != nil {
-						a.lg.ErrorCtx(ctx, "save to storate error", zap.Error(err), zap.Any("metric", m))
-						a.metricsPool.Put(m)
-						return fmt.Errorf("internal/agent/poller_pipe save to storate error %w", err)
-					} else {
-						a.metricsPool.Put(m)
+					if err := a.repository.SaveAndRelease(ctx, m); err != nil {
+						return fmt.Errorf("internal/agent/poller_pipe save metric %+v to storate error %w", metrics, err)
 					}
 				}
 			}
@@ -60,10 +56,10 @@ func (a *Agent) genMetrics(ctx context.Context, g *errgroup.Group) chan *models.
 	done := make(chan struct{})
 
 	// Start all metric generators
-	a.genRuntimeMetrics(ctx, wg, g, metrics, done, true)
-	a.genCustromMetrics(ctx, wg, g, metrics, done, true)
-	a.genVirtualMemoryMetrics(ctx, wg, g, metrics, done, true)
-	a.genCPUMetrics(ctx, wg, g, metrics, done, true)
+	a.genRuntimeMetrics(ctx, wg, g, metrics, done)
+	a.genCustromMetrics(ctx, wg, g, metrics, done)
+	a.genVirtualMemoryMetrics(ctx, wg, g, metrics, done)
+	a.genCPUMetrics(ctx, wg, g, metrics, done)
 
 	// Close metrics channel when all generators are done
 	g.Go(func() error {
@@ -82,7 +78,6 @@ func (a *Agent) genCPUMetrics(
 	g *errgroup.Group,
 	metrics chan *models.Metric,
 	done chan struct{},
-	fromPool bool,
 ) {
 	wg.Add(1)
 	g.Go(func() error {
@@ -106,32 +101,15 @@ func (a *Agent) genCPUMetrics(
 					return fmt.Errorf("internal/agent/poller_pipe convert to str error %w", err)
 				}
 
-				var res *models.Metric
-				if fromPool {
-					res = a.metricsPool.Get()
-					res.Name = m.Name
-					res.Type = m.Type
-					res.Value = val
-				} else {
-					res = &models.Metric{
-						Name:  m.Name,
-						Type:  m.Type,
-						Value: val,
-					}
-				}
+				res := a.repository.New(m.Name, m.Type, val)
 
 				select {
 				case metrics <- res:
 				case <-ctx.Done():
-					if fromPool {
-						a.metricsPool.Put(res)
-					}
+					a.repository.Release(res)
 					a.lg.InfoCtx(ctx, "genCPUMetrics context done with context cancellation")
 					return nil
 				case <-done:
-					if fromPool {
-						a.metricsPool.Put(res)
-					}
 					return nil
 				}
 			}
@@ -147,7 +125,6 @@ func (a *Agent) genVirtualMemoryMetrics(
 	g *errgroup.Group,
 	metrics chan *models.Metric,
 	done chan struct{},
-	fromPool bool,
 ) {
 	wg.Add(1)
 	g.Go(func() error {
@@ -171,32 +148,15 @@ func (a *Agent) genVirtualMemoryMetrics(
 					return fmt.Errorf("internal/agent/poller_pipe convert to str error %w", err)
 				}
 
-				var res *models.Metric
-				if fromPool {
-					res = a.metricsPool.Get()
-					res.Name = m.Name
-					res.Type = m.Type
-					res.Value = val
-				} else {
-					res = &models.Metric{
-						Name:  m.Name,
-						Type:  m.Type,
-						Value: val,
-					}
-				}
+				res := a.repository.New(m.Name, m.Type, val)
 
 				select {
 				case metrics <- res:
 				case <-ctx.Done():
-					if fromPool {
-						a.metricsPool.Put(res)
-					}
+					a.repository.Release(res)
 					a.lg.InfoCtx(ctx, "genVirtualMemoryMetrics context done with context cancellation")
 					return nil
 				case <-done:
-					if fromPool {
-						a.metricsPool.Put(res)
-					}
 					return nil
 				}
 			}
@@ -212,7 +172,6 @@ func (a *Agent) genCustromMetrics(
 	g *errgroup.Group,
 	metrics chan *models.Metric,
 	done chan struct{},
-	fromPool bool,
 ) {
 	wg.Add(1)
 	g.Go(func() error {
@@ -226,7 +185,7 @@ func (a *Agent) genCustromMetrics(
 			case <-done:
 				return nil
 			default:
-				val, err := m.generateValue(&m, a)
+				val, err := m.generateValue(m, a)
 				if err != nil {
 					return fmt.Errorf("internal/agent/poller_pipe generate val error %w", err)
 				}
@@ -236,32 +195,15 @@ func (a *Agent) genCustromMetrics(
 					return fmt.Errorf("internal/agent/poller_pipe generate val error %w", err)
 				}
 
-				var res *models.Metric
-				if fromPool {
-					res = a.metricsPool.Get()
-					res.Name = m.Name
-					res.Type = m.Type
-					res.Value = sVal
-				} else {
-					res = &models.Metric{
-						Name:  m.Name,
-						Type:  m.Type,
-						Value: sVal,
-					}
-				}
+				res := a.repository.New(m.Name, m.Type, sVal)
 
 				select {
 				case metrics <- res:
 				case <-ctx.Done():
-					if fromPool {
-						a.metricsPool.Put(res)
-					}
+					a.repository.Release(res)
 					a.lg.InfoCtx(ctx, "genCustromMetrics context done with context cancellation")
 					return nil
 				case <-done:
-					if fromPool {
-						a.metricsPool.Put(res)
-					}
 					return nil
 				}
 			}
@@ -277,7 +219,6 @@ func (a *Agent) genRuntimeMetrics(
 	g *errgroup.Group,
 	metrics chan *models.Metric,
 	done chan struct{},
-	fromPool bool,
 ) {
 	wg.Add(1)
 	g.Go(func() error {
@@ -299,32 +240,15 @@ func (a *Agent) genRuntimeMetrics(
 					return fmt.Errorf("internal/agent/poller_pipe convert to str error %w", err)
 				}
 
-				var res *models.Metric
-				if fromPool {
-					res = a.metricsPool.Get()
-					res.Name = m.Name
-					res.Type = m.Type
-					res.Value = val
-				} else {
-					res = &models.Metric{
-						Name:  m.Name,
-						Type:  m.Type,
-						Value: val,
-					}
-				}
+				res := a.repository.New(m.Name, m.Type, val)
 
 				select {
 				case metrics <- res:
 				case <-ctx.Done():
-					if fromPool {
-						a.metricsPool.Put(res)
-					}
+					a.repository.Release(res)
 					a.lg.InfoCtx(ctx, "genRuntimeMetrics context done with context cancellation")
 					return nil
 				case <-done:
-					if fromPool {
-						a.metricsPool.Put(res)
-					}
 					return nil
 				}
 			}

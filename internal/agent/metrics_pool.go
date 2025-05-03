@@ -11,8 +11,8 @@ type MetricsPool struct {
 	metricsL sync.Mutex
 }
 
-func NewMetricsPool() *MetricsPool {
-	return &MetricsPool{
+func NewMetricsPool() MetricsPool {
+	return MetricsPool{
 		pool: sync.Pool{
 			New: func() any {
 				return &models.Metric{}

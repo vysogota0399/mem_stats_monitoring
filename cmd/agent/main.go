@@ -40,10 +40,12 @@ func main() {
 
 	info(lg)
 
+	rep := agent.NewMetricsRepository(storage.NewMemoryStorage(lg))
+
 	agent := agent.NewAgent(
 		lg,
 		cfg,
-		storage.NewMemoryStorage(lg),
+		rep,
 		clients.NewCompReporter(cfg.ServerURL, lg, &cfg, clients.NewDefaulut()),
 	)
 
