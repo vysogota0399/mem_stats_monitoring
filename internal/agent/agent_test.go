@@ -21,13 +21,14 @@ func TestNewAgent(t *testing.T) {
 	logger, err := logging.MustZapLogger(&config.Config{LogLevel: 0})
 	assert.NoError(t, err)
 	store := storage.NewMemoryStorage(logger)
+	rep := NewMetricsRepository(store)
 	cfg, err := config.NewConfig(nil)
 	assert.NoError(t, err)
 
-	agent := NewAgent(logger, cfg, store, nil)
+	agent := NewAgent(logger, cfg, rep, nil)
 	assert.NotNil(t, agent)
 	assert.Equal(t, logger, agent.lg)
-	assert.Equal(t, store, agent.storage)
+	assert.Equal(t, rep, agent.repository)
 	assert.Equal(t, cfg, agent.cfg)
 }
 
@@ -39,13 +40,14 @@ func TestRunPollerPipe(t *testing.T) {
 	require.NoError(t, err)
 
 	store := storage.NewMemoryStorage(logger)
+	rep := NewMetricsRepository(store)
 	cfg := config.Config{
 		PollInterval:   time.Millisecond * 900,
 		ReportInterval: time.Millisecond * 900,
 	}
 	assert.NoError(t, err)
 
-	agent := NewAgent(logger, cfg, store, nil)
+	agent := NewAgent(logger, cfg, rep, nil)
 	ctx := context.Background()
 
 	err = agent.runPollerPipe(ctx)
@@ -61,10 +63,12 @@ func TestGenMetrics(t *testing.T) {
 	assert.NoError(t, err)
 
 	store := storage.NewMemoryStorage(logger)
+	rep := NewMetricsRepository(store)
+
 	cfg, err := config.NewConfig(nil)
 	assert.NoError(t, err)
 
-	agent := NewAgent(logger, cfg, store, nil)
+	agent := NewAgent(logger, cfg, rep, nil)
 	ctx := context.Background()
 
 	metricsChan := agent.genMetrics(ctx, &errgroup.Group{})
@@ -94,10 +98,11 @@ func TestSaveMetrics(t *testing.T) {
 	require.NoError(t, err)
 
 	store := storage.NewMemoryStorage(logger)
+	rep := NewMetricsRepository(store)
 	cfg := config.Config{}
 	assert.NoError(t, err)
 
-	agent := NewAgent(logger, cfg, store, nil)
+	agent := NewAgent(logger, cfg, rep, nil)
 
 	metricsChan := make(chan *models.Metric, 10)
 	errg, ctx := errgroup.WithContext(context.Background())
@@ -200,14 +205,13 @@ func TestAgent_Start(t *testing.T) {
 
 			agent := &Agent{
 				lg:                   lg,
-				storage:              storage.NewMemoryStorage(lg),
+				repository:           NewMetricsRepository(storage.NewMemoryStorage(lg)),
 				cfg:                  cfg,
 				reporter:             mockClient,
 				runtimeMetrics:       runtimeMetricsDefinition,
 				customMetrics:        customMetricsDefinition,
 				virtualMemoryMetrics: virtualMemoryMetricsDefinition,
 				cpuMetrics:           cpuMetricsDefinition,
-				metricsPool:          NewMetricsPool(),
 			}
 
 			ctx, cancel := tt.setup(mockClient)

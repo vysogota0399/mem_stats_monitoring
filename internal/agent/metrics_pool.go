@@ -7,8 +7,7 @@ import (
 )
 
 type MetricsPool struct {
-	pool     sync.Pool
-	metricsL sync.Mutex
+	pool sync.Pool
 }
 
 func NewMetricsPool() MetricsPool {
@@ -18,19 +17,22 @@ func NewMetricsPool() MetricsPool {
 				return &models.Metric{}
 			},
 		},
-		metricsL: sync.Mutex{},
 	}
 }
 
-func (p *MetricsPool) Get() *models.Metric {
-	return p.pool.Get().(*models.Metric)
+func (p *MetricsPool) Get(name, mtype, value string) *models.Metric {
+	m := p.pool.Get().(*models.Metric)
+	m.Name = name
+	m.Type = mtype
+	m.Value = value
+	return m
 }
 
 func (p *MetricsPool) Put(m *models.Metric) {
-	p.metricsL.Lock()
-	defer p.metricsL.Unlock()
-
-	p.pool.Put(m.Reset())
+	m.Name = ""
+	m.Type = ""
+	m.Value = ""
+	p.pool.Put(m)
 }
 
 func (p *MetricsPool) Free(batch []*models.Metric) {
