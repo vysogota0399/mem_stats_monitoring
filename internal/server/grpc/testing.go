@@ -9,6 +9,8 @@ import (
 	"github.com/vysogota0399/mem_stats_monitoring/pkg/gen/services/metrics"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func RunTestServer(t testing.TB, config *config.Config, lg *logging.ZapLogger, h metrics.MetricsServiceServer) {
@@ -34,4 +36,37 @@ func RunTestServer(t testing.TB, config *config.Config, lg *logging.ZapLogger, h
 			t.Errorf("error stopping grpc server %s", err.Error())
 		}
 	})
+}
+
+type TestHandler struct {
+	*Handler
+}
+
+type TestHandlerOpt func(h *TestHandler)
+
+func NewTestHandler(t testing.TB, opts ...TestHandlerOpt) *TestHandler {
+	t.Helper()
+	base := NewHandler()
+	h := &TestHandler{Handler: base}
+	for _, f := range opts {
+		f(h)
+	}
+
+	return h
+}
+
+func NewTestClient(t testing.TB, cfg *config.Config) metrics.MetricsServiceClient {
+	t.Helper()
+
+	conn, err := grpc.NewClient(":"+cfg.GRPCPort, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Errorf("failed to open connection, maybe server is not running")
+	}
+	t.Cleanup(func() {
+		if err := conn.Close(); err != nil {
+			t.Errorf("failed to close connection")
+		}
+	})
+
+	return metrics.NewMetricsServiceClient(conn)
 }
