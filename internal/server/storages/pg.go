@@ -51,7 +51,7 @@ func (m *GooseMigrator) Migrate(db *sql.DB) error {
 }
 
 type ConnectionOpener interface {
-	OpenDB(ctx context.Context, dbDsn string) (*sql.DB, error)
+	OpenDB(ctx context.Context) (*sql.DB, error)
 }
 
 type PGConnectionOpener struct {
@@ -72,9 +72,9 @@ func NewPGConnectionOpener(lg *logging.ZapLogger, cfg *config.Config) *PGConnect
 
 const pgxDriver string = "pgx"
 
-func (o *PGConnectionOpener) OpenDB(ctx context.Context, dbDsn string) (*sql.DB, error) {
+func (o *PGConnectionOpener) OpenDB(ctx context.Context) (*sql.DB, error) {
 	o.atpt++
-	db, err := sql.Open(pgxDriver, dbDsn)
+	db, err := sql.Open(pgxDriver, o.dbDsn)
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +87,7 @@ func (o *PGConnectionOpener) OpenDB(ctx context.Context, dbDsn string) (*sql.DB,
 
 		if errors.As(err, &pgErr) && pgerrcode.IsConnectionException(pgErr.Code) && o.atpt <= o.maxOpenRetries {
 			time.Sleep(time.Duration(utils.Delay(o.atpt)) * time.Second)
-			return o.OpenDB(ctx, o.dbDsn)
+			return o.OpenDB(ctx)
 		}
 
 		return nil, err
@@ -114,7 +114,7 @@ func NewPG(
 	migrator Migrator,
 	connectionOpener ConnectionOpener,
 ) (*PG, error) {
-	db, err := connectionOpener.OpenDB(context.Background(), cfg.DatabaseDSN)
+	db, err := connectionOpener.OpenDB(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -200,12 +200,21 @@ func (pg *PG) GetGauge(ctx context.Context, record *models.Gauge) error {
 		}
 	}()
 
-	if err := rows.Scan(&record.Value, &record.ID, &record.Name); err != nil {
-		return fmt.Errorf("pg: get gauge failed error %w", err)
+	var rowsCount int64
+	for rows.Next() {
+		if err := rows.Scan(&record.Value, &record.ID, &record.Name); err != nil {
+			return fmt.Errorf("pg: get gauge failed error %w", err)
+		}
+
+		rowsCount++
 	}
 
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("pg: close rows err %w", err)
+	}
+
+	if rowsCount == 0 {
+		return ErrNoRecords
 	}
 
 	return nil
@@ -232,14 +241,20 @@ func (pg *PG) GetCounter(ctx context.Context, record *models.Counter) error {
 		}
 	}()
 
+	var rowsCount int64
 	for rows.Next() {
 		if err := rows.Scan(&record.Value, &record.ID, &record.Name); err != nil {
 			return fmt.Errorf("pg: get counter failed error %w", err)
 		}
+		rowsCount++
 	}
 
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("pg: close rows err %w", err)
+	}
+
+	if rowsCount == 0 {
+		return ErrNoRecords
 	}
 
 	return nil

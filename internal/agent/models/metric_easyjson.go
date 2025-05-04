@@ -74,13 +74,6 @@ func easyjson9478868cEncodeGithubComVysogota0399MemStatsMonitoringInternalAgentM
 	out.RawByte('}')
 }
 
-// MarshalJSON supports json.Marshaler interface
-func (v Metric) MarshalJSON() ([]byte, error) {
-	w := jwriter.Writer{}
-	easyjson9478868cEncodeGithubComVysogota0399MemStatsMonitoringInternalAgentModels(&w, v)
-	return w.Buffer.BuildBytes(), w.Error
-}
-
 // MarshalEasyJSON supports easyjson.Marshaler interface
 func (v Metric) MarshalEasyJSON(w *jwriter.Writer) {
 	easyjson9478868cEncodeGithubComVysogota0399MemStatsMonitoringInternalAgentModels(w, v)
@@ -91,9 +84,4 @@ func (v *Metric) UnmarshalJSON(data []byte) error {
 	r := jlexer.Lexer{Data: data}
 	easyjson9478868cDecodeGithubComVysogota0399MemStatsMonitoringInternalAgentModels(&r, v)
 	return r.Error()
-}
-
-// UnmarshalEasyJSON supports easyjson.Unmarshaler interface
-func (v *Metric) UnmarshalEasyJSON(l *jlexer.Lexer) {
-	easyjson9478868cDecodeGithubComVysogota0399MemStatsMonitoringInternalAgentModels(l, v)
 }

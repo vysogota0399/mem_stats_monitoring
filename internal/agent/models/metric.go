@@ -21,3 +21,7 @@ func (m Metric) String() string {
 
 	return string(record)
 }
+
+func (m *Metric) FromJSON(inp []byte) error {
+	return m.UnmarshalJSON(inp)
+}
