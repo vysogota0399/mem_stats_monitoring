@@ -8,7 +8,8 @@ import (
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/config"
 	"google.golang.org/grpc"
 
-	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
+	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
+	lg "github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
 	"github.com/vysogota0399/mem_stats_monitoring/pkg/gen/services/metrics"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -16,7 +17,7 @@ import (
 
 type Server struct {
 	cfg        *config.Config
-	lg         *logging.ZapLogger
+	lg         *lg.ZapLogger
 	grpcServer *grpc.Server
 }
 
@@ -25,7 +26,7 @@ var _ metrics.MetricsServiceServer = (*Handler)(nil)
 func NewServer(
 	lc fx.Lifecycle,
 	cfg *config.Config,
-	lg *logging.ZapLogger,
+	lg *lg.ZapLogger,
 	handler metrics.MetricsServiceServer,
 ) *Server {
 	srv := &Server{
@@ -41,7 +42,11 @@ func NewServer(
 					return fmt.Errorf("server: failed to create listener on port %s error %w", cfg.GRPCPort, err)
 				}
 
-				srv.grpcServer = grpc.NewServer()
+				srv.grpcServer = grpc.NewServer(
+					grpc.ChainUnaryInterceptor(
+						logging.UnaryServerInterceptor(InterceptorLogger(zap.NewExample())),
+					),
+				)
 
 				metrics.RegisterMetricsServiceServer(srv.grpcServer, handler)
 				go func() {

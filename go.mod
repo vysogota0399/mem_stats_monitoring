@@ -7,6 +7,7 @@ require (
 	github.com/caarlos0/env v3.5.0+incompatible
 	github.com/gin-gonic/gin v1.10.0
 	github.com/golang/mock v1.6.0
+	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.2
 	github.com/jackc/pgerrcode v0.0.0-20240316143900-6e2875d9b438
 	github.com/kisielk/errcheck v1.9.0
 	github.com/mailru/easyjson v0.9.0

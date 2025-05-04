@@ -1,7 +1,8 @@
 package grpc
 
 import (
-	"log"
+	"context"
+	"errors"
 	"reflect"
 	"testing"
 
@@ -9,11 +10,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/mocks/server/repositories"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/config"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/server/models"
 
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
+	"github.com/vysogota0399/mem_stats_monitoring/pkg/gen/entities"
 	"github.com/vysogota0399/mem_stats_monitoring/pkg/gen/services/metrics"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -67,7 +68,54 @@ func TestIndexHandler_Index(t *testing.T) {
 		want    *metrics.IndexResponse
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name:    "when fetch gauges failed error",
+			fields:  fields{},
+			args:    args{params: &emptypb.Empty{}},
+			wantErr: true,
+			prepare: func(f *fields) {
+				f.gaugeRepository.EXPECT().All(gomock.Any()).Return(nil, errors.New("error"))
+			},
+		},
+		{
+			name:   "fetch counter failed error",
+			fields: fields{},
+			args:   args{params: &emptypb.Empty{}},
+			prepare: func(f *fields) {
+				f.gaugeRepository.EXPECT().All(gomock.Any()).Return([]models.Gauge{}, nil)
+				f.counterRepository.EXPECT().All(gomock.Any()).Return(nil, errors.New("error"))
+			},
+			wantErr: true,
+		},
+		{
+			name:   "when ok",
+			fields: fields{},
+			args:   args{params: &emptypb.Empty{}},
+			prepare: func(f *fields) {
+				f.gaugeRepository.EXPECT().All(gomock.Any()).Return([]models.Gauge{{Name: "g1", Value: 1}}, nil)
+				f.counterRepository.EXPECT().All(gomock.Any()).Return([]models.Counter{{Name: "c1", Value: 1}}, nil)
+			},
+			want: &metrics.IndexResponse{
+				Items: []*metrics.Item{
+					{
+						Metric: &metrics.Item_Gauge{
+							Gauge: &entities.Gauge{
+								Name:  "g1",
+								Value: 1,
+							},
+						},
+					},
+					{
+						Metric: &metrics.Item_Counter{
+							Counter: &entities.Counter{
+								Name:  "c1",
+								Value: 1,
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 
 	cfg := &config.Config{
@@ -86,22 +134,31 @@ func TestIndexHandler_Index(t *testing.T) {
 			tt.fields.gaugeRepository = repositories.NewMockIGaugeRepository(ctrl)
 			tt.prepare(&tt.fields)
 
-			h := &IndexHandler{
-				gaugeRepository:   tt.fields.gaugeRepository,
-				counterRepository: tt.fields.counterRepository,
-				lg:                lg,
+			handler := NewIndexHandler(tt.fields.gaugeRepository, tt.fields.counterRepository, lg)
+			th := NewTestHandler(t, func(h *TestHandler) {
+				h.IndexHandler = *handler
+			})
+
+			RunTestServer(t, cfg, lg, th)
+
+			client := NewTestClient(t, cfg)
+			resp, err := client.Index(context.Background(), &emptypb.Empty{})
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, len(tt.want.Items), len(resp.Items))
+				for i, item := range resp.Items {
+					switch m := item.Metric.(type) {
+					case *metrics.Item_Gauge:
+						assert.Equal(t, tt.want.Items[i].GetGauge().Name, m.Gauge.Name)
+						assert.Equal(t, tt.want.Items[i].GetGauge().Value, m.Gauge.Value)
+					case *metrics.Item_Counter:
+						assert.Equal(t, tt.want.Items[i].GetCounter().Name, m.Counter.Name)
+						assert.Equal(t, tt.want.Items[i].GetCounter().Value, m.Counter.Value)
+					}
+				}
 			}
-
-			RunTestServer(t, cfg, lg, nil)
-
-			conn, err := grpc.NewClient(":"+cfg.GRPCPort, grpc.WithTransportCredentials(insecure.NewCredentials()))
-			if err != nil {
-				log.Fatal(err)
-			}
-			defer conn.Close()
-
-			client := metrics.NewMetricsServiceClient(conn)
-
 		})
 	}
 }
