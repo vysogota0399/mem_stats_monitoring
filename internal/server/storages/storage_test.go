@@ -52,7 +52,7 @@ func TestNewStorage(t *testing.T) {
 			want: &PG{},
 			args: args{},
 			prepare: func(args *args) {
-				args.connectionOpener.EXPECT().OpenDB(gomock.Any(), gomock.Any()).Return(nil, nil)
+				args.connectionOpener.EXPECT().OpenDB(gomock.Any()).Return(nil, nil)
 			},
 			wantErr: false,
 		},
