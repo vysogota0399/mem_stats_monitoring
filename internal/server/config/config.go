@@ -31,7 +31,7 @@ type Config struct {
 	PrivateKey      io.Reader `json:"private_key_path"`
 	ConfigPath      string    `json:"config_path" env:"CONFIG" envDefault:""`
 	TrustedSubnet   string    `json:"trusted_subnet" env:"TRUSTED_SUBNET" envDefault:""`
-	GRPCPort        string    `json:"grpc_port" env:"GRPC_PORT", envDefault:":3200"`
+	GRPCPort        string    `json:"grpc_port" env:"GRPC_PORT" envDefault:"3200"`
 }
 
 func (c *Config) LLevel() zapcore.Level {
@@ -114,6 +114,10 @@ func (c *Config) parseFlags() error {
 
 	if flag.Lookup("t") == nil {
 		flag.StringVar(&c.TrustedSubnet, "t", "", "trusted subnet for incoming requests")
+	}
+
+	if flag.Lookup("grpc-port") == nil {
+		flag.StringVar(&c.GRPCPort, "grpc-port", "3200", "grpc port")
 	}
 
 	flag.Parse()

@@ -30,6 +30,7 @@ type Config struct {
 	MaxAttempts    uint8         `json:"max_attempts" env:"MAX_ATTEMPTS" envDefault:"2"`
 	HTTPCert       io.Reader     `json:"crypto_key" env:"CRYPTO_KEY"`
 	ConfigPath     string        `json:"config_path" env:"CONFIG" envDefault:""`
+	GRPCPort       string        `json:"grpc_port" env:"GRPC_PORT" envDefault:"3200"`
 }
 
 func NewConfig(f FileConfigurer) (Config, error) {
@@ -98,6 +99,10 @@ func NewConfig(f FileConfigurer) (Config, error) {
 		c.MaxAttempts = 2
 	}
 
+	if val, ok := os.LookupEnv("GRPC_PORT"); ok {
+		c.GRPCPort = val
+	}
+
 	c.ServerURL = fmt.Sprintf("http://%s", c.ServerURL)
 
 	if err := fromFile(&c, f); err != nil {
@@ -159,6 +164,10 @@ func (c *Config) parseFlags() error {
 
 	if flag.Lookup("c") == nil {
 		flag.StringVar(&c.ConfigPath, "c", "", "file to config.json")
+	}
+
+	if flag.Lookup("grpc-port") == nil {
+		flag.StringVar(&c.GRPCPort, "grpc-port", "3200", "grpc port")
 	}
 
 	flag.Parse()
