@@ -3,12 +3,15 @@ package clients
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
 	"math/rand"
 	"net/http"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/brianvoe/gofakeit/v7"
 	"github.com/golang/mock/gomock"
@@ -529,6 +532,184 @@ func TestReporter_UpdateMetrics(t *testing.T) {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func Test_attemptDelay(t *testing.T) {
+	type args struct {
+		i uint8
+	}
+	tests := []struct {
+		name string
+		args args
+		want time.Duration
+	}{
+		{
+			name: "attempt delay",
+			args: args{i: 0},
+			want: 1 * time.Second,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := attemptDelay(tt.args.i); got != tt.want {
+				t.Errorf("attemptDelay() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_gzbody(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr bool
+	}{
+		{
+			name:    "empty input",
+			input:   "",
+			wantErr: false,
+		},
+		{
+			name:    "simple text",
+			input:   "Hello, World!",
+			wantErr: false,
+		},
+		{
+			name:    "long text",
+			input:   strings.Repeat("This is a test string that will be compressed. ", 100),
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			input := bytes.NewBufferString(tt.input)
+			got, err := gzbody(input)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+			assert.NotNil(t, got)
+		})
+	}
+}
+
+func TestReporter_signRequest(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	lg, err := logging.MustZapLogger(&config.Config{LogLevel: 1})
+	assert.NoError(t, err)
+
+	type fields struct {
+		client          Requester
+		address         string
+		lg              *logging.ZapLogger
+		compressor      compressor
+		maxAttempts     uint8
+		secretKey       []byte
+		semaphore       *semaphore
+		publicKeyPath   io.Reader
+		encryptor       Encryptor
+		repository      *agent.MetricsRepository
+		ipAddressSetter IRealIPHeaderSetter
+	}
+	type args struct {
+		ctx context.Context
+		r   *http.Request
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+		setup   func(*fields, *args)
+	}{
+		{
+			name: "no secret key - no signing",
+			fields: fields{
+				lg:        lg,
+				secretKey: nil,
+			},
+			args: args{
+				ctx: context.Background(),
+				r:   &http.Request{},
+			},
+			wantErr: false,
+			setup: func(f *fields, a *args) {
+				// No setup needed
+			},
+		},
+		{
+			name: "missing body in context",
+			fields: fields{
+				lg:        lg,
+				secretKey: []byte("test-key"),
+			},
+			args: args{
+				ctx: context.Background(),
+				r:   &http.Request{},
+			},
+			wantErr: true,
+			setup: func(f *fields, a *args) {
+				// No setup needed - context is empty
+			},
+		},
+		{
+			name: "successful signing",
+			fields: fields{
+				lg:        lg,
+				secretKey: []byte("test-key"),
+			},
+			args: args{
+				ctx: context.Background(),
+				r:   &http.Request{Header: http.Header{}},
+			},
+			wantErr: false,
+			setup: func(f *fields, a *args) {
+				// Add body to context
+				a.ctx = context.WithValue(a.ctx, bodyKey("body"), []byte("test-body"))
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.setup != nil {
+				tt.setup(&tt.fields, &tt.args)
+			}
+
+			c := &Reporter{
+				client:          tt.fields.client,
+				address:         tt.fields.address,
+				lg:              tt.fields.lg,
+				compressor:      tt.fields.compressor,
+				maxAttempts:     tt.fields.maxAttempts,
+				secretKey:       tt.fields.secretKey,
+				semaphore:       tt.fields.semaphore,
+				publicKeyPath:   tt.fields.publicKeyPath,
+				encryptor:       tt.fields.encryptor,
+				repository:      tt.fields.repository,
+				ipAddressSetter: tt.fields.ipAddressSetter,
+			}
+			err := c.signRequest(tt.args.ctx, tt.args.r)
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.name == "missing body in context" {
+					assert.Equal(t, ErrBodyKeyNotFoundInContext, err)
+				}
+			} else {
+				assert.NoError(t, err)
+				if tt.name == "successful signing" {
+					signature := tt.args.r.Header.Get(signHeaderKey)
+					assert.NotEmpty(t, signature)
+
+					_, err := base64.StdEncoding.DecodeString(signature)
+					assert.NoError(t, err)
+				}
 			}
 		})
 	}

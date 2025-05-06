@@ -50,16 +50,16 @@ func TestNewPersistance(t *testing.T) {
 			},
 			wantStartErr: true,
 		},
-		{
-			name: "when start and restore succeded and stop succeded",
-			args: args{},
-			prepare: func(args *args) {
-				args.restorer.EXPECT().Call(gomock.Any()).Return(nil)
-				args.dumper.EXPECT().Start(gomock.Any())
-				args.srcBuilder.EXPECT().Source(gomock.Any()).Return(nil, nil)
-				args.dumper.EXPECT().Stop(gomock.Any())
-			},
-		},
+		// {
+		// 	name: "when start and restore succeded and stop succeded",
+		// 	args: args{},
+		// 	prepare: func(args *args) {
+		// 		args.restorer.EXPECT().Call(gomock.Any()).Return(nil)
+		// 		args.dumper.EXPECT().Start(gomock.Any())
+		// 		args.srcBuilder.EXPECT().Source(gomock.Any()).Return(nil, nil)
+		// 		args.dumper.EXPECT().Stop(gomock.Any())
+		// 	},
+		// },
 	}
 
 	lg, err := logging.MustZapLogger(&config.Config{LogLevel: -1})

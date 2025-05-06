@@ -31,6 +31,7 @@ type Config struct {
 	HTTPCert       io.Reader     `json:"crypto_key" env:"CRYPTO_KEY"`
 	ConfigPath     string        `json:"config_path" env:"CONFIG" envDefault:""`
 	GRPCPort       string        `json:"grpc_port" env:"GRPC_PORT" envDefault:"3200"`
+	BatchReport    bool          `json:"batch_report" env:"BATCH_REPORT"`
 }
 
 func NewConfig(f FileConfigurer) (Config, error) {
@@ -103,6 +104,15 @@ func NewConfig(f FileConfigurer) (Config, error) {
 		c.GRPCPort = val
 	}
 
+	if val, ok := os.LookupEnv("BATCH_REPORT"); ok {
+		flag, err := strconv.ParseBool(val)
+		if err != nil {
+			return c, err
+		}
+
+		c.BatchReport = flag
+	}
+
 	c.ServerURL = fmt.Sprintf("http://%s", c.ServerURL)
 
 	if err := fromFile(&c, f); err != nil {
@@ -168,6 +178,10 @@ func (c *Config) parseFlags() error {
 
 	if flag.Lookup("grpc-port") == nil {
 		flag.StringVar(&c.GRPCPort, "grpc-port", "3200", "grpc port")
+	}
+
+	if flag.Lookup("batch-report") == nil {
+		flag.BoolVar(&c.BatchReport, "batch-report", true, "send metrics in batches")
 	}
 
 	flag.Parse()

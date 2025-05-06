@@ -257,12 +257,20 @@ func TestPG_CreateOrUpdate(t *testing.T) {
 			prepare: func(p *PG) error {
 				return p.db.Close()
 			},
+			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			pg := initPG(t, lg)
-			pg.CreateOrUpdate(context.Background(), tt.args.mType, tt.args.mName, tt.args.val)
+			assert.NoError(t, tt.prepare(pg))
+
+			err := pg.CreateOrUpdate(context.Background(), tt.args.mType, tt.args.mName, tt.args.val)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
 		})
 	}
 }

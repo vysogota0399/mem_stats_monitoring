@@ -402,12 +402,12 @@ func (c Reporter) prepareBody(mType, mName, value string) (*bytes.Buffer, error)
 }
 
 func gzbody(b *bytes.Buffer) (*bytes.Buffer, error) {
-	var res *bytes.Buffer
-	w, err := flate.NewWriter(b, flate.BestCompression)
+	res := &bytes.Buffer{}
+	w, err := flate.NewWriter(res, flate.BestCompression)
 	if err != nil {
 		return nil, err
 	}
-	_, err = w.Write(res.Bytes())
+	_, err = w.Write(b.Bytes())
 	if err != nil {
 		return nil, fmt.Errorf("internal/agent/clients/reporter.go write to buffer error %w", err)
 	}

@@ -59,35 +59,4 @@ func (v MetricsBodyAlias) MarshalEasyJSON(w *jwriter.Writer) {
 	easyjsonF860cb9bEncodeGithubComVysogota0399MemStatsMonitoringInternalAgentClients2(w, v)
 }
 
-func easyjsonF860cb9bEncodeGithubComVysogota0399MemStatsMonitoringInternalAgentClients3(out *jwriter.Writer, in MetricsBody) {
-	out.RawByte('{')
-	first := true
-	_ = first
-	{
-		const prefix string = ",\"id\":"
-		out.RawString(prefix[1:])
-		out.String(string(in.MName))
-	}
-	{
-		const prefix string = ",\"type\":"
-		out.RawString(prefix)
-		out.String(string(in.MType))
-	}
-	if in.Delta != "" {
-		const prefix string = ",\"delta\":"
-		out.RawString(prefix)
-		out.String(string(in.Delta))
-	}
-	if in.Value != "" {
-		const prefix string = ",\"value\":"
-		out.RawString(prefix)
-		out.String(string(in.Value))
-	}
-	out.RawByte('}')
-}
-
-// MarshalEasyJSON supports easyjson.Marshaler interface
-func (v MetricsBody) MarshalEasyJSON(w *jwriter.Writer) {
-	easyjsonF860cb9bEncodeGithubComVysogota0399MemStatsMonitoringInternalAgentClients3(w, v)
-}
 

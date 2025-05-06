@@ -32,6 +32,7 @@ type Agent struct {
 	cpuMetrics           []CPUMetric
 	reporterPipeLock     sync.Mutex
 	repository           *MetricsRepository
+	batchReport          bool
 }
 
 // NewAgent creates a new Agent instance with the specified configuration
@@ -46,6 +47,7 @@ func NewAgent(lg *logging.ZapLogger, cfg config.Config, rep *MetricsRepository, 
 		cpuMetrics:           cpuMetricsDefinition,
 		reporterPipeLock:     sync.Mutex{},
 		repository:           rep,
+		batchReport:          cfg.BatchReport,
 	}
 }
 

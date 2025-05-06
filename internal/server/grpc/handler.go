@@ -16,8 +16,20 @@ type Handler struct {
 	UpdateHandler
 }
 
-func NewHandler() *Handler {
-	return &Handler{}
+func NewHandler(
+	pingHandler *PingHandler,
+	indexHandler *IndexHandler,
+	showHandler *ShowHandler,
+	updateBatchHandler *UpdateBatchHandler,
+	updateHandler *UpdateHandler,
+) *Handler {
+	return &Handler{
+		PingHandler:        *pingHandler,
+		IndexHandler:       *indexHandler,
+		ShowHandler:        *showHandler,
+		UpdateBatchHandler: *updateBatchHandler,
+		UpdateHandler:      *updateHandler,
+	}
 }
 
 func (h *Handler) Ping(ctx context.Context, params *emptypb.Empty) (*emptypb.Empty, error) {

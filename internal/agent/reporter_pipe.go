@@ -119,24 +119,30 @@ func (a *Agent) report(
 	batchLock := &sync.Mutex{}
 
 	for m := range metrics {
-		g.Go(
-			func() error {
-				name, mtype, value := a.repository.SafeRead(m)
-				if err := a.reporter.UpdateMetric(ctx, mtype, name, value); err != nil {
-					a.repository.Release(m)
-					return fmt.Errorf("report_pipe: upload metric err %w", err)
-				}
+		if !a.batchReport {
+			g.Go(
+				func() error {
+					name, mtype, value := a.repository.SafeRead(m)
+					if err := a.reporter.UpdateMetric(ctx, mtype, name, value); err != nil {
+						a.repository.Release(m)
+						return fmt.Errorf("report_pipe: upload metric err %w", err)
+					}
 
-				return nil
-			},
-		)
-
-		batchLock.Lock()
-		batch = append(batch, m)
-		batchLock.Unlock()
+					return nil
+				},
+			)
+		} else {
+			batchLock.Lock()
+			batch = append(batch, m)
+			batchLock.Unlock()
+		}
 	}
 
 	if len(batch) == 0 {
+		return
+	}
+
+	if !a.batchReport {
 		return
 	}
 

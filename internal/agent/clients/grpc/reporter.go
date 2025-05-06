@@ -11,6 +11,7 @@ import (
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
 	"github.com/vysogota0399/mem_stats_monitoring/pkg/gen/entities"
 	"github.com/vysogota0399/mem_stats_monitoring/pkg/gen/services/metrics"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -30,7 +31,9 @@ func NewReporter(ctx context.Context, cfg *config.Config, rep *agent.MetricsRepo
 	go func() {
 		<-ctx.Done()
 		lg.InfoCtx(ctx, "GC grpc client")
-		conn.Close()
+		if err := conn.Close(); err != nil {
+			lg.ErrorCtx(ctx, "failed to close grpc client", zap.Error(err))
+		}
 	}()
 
 	return &Reporter{
