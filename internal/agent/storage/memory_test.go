@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -98,6 +99,30 @@ func TestSet(t *testing.T) {
 
 			actualValue := tt.data[tt.val.Type][tt.val.Name]
 			assert.Equal(t, tt.val.Value, actualValue)
+		})
+	}
+}
+
+func TestNewMemoryStorage(t *testing.T) {
+	type args struct {
+		lg *logging.ZapLogger
+	}
+	tests := []struct {
+		name string
+		args args
+		want *Memory
+	}{
+		{
+			name: "successful memory storage creation",
+			args: args{lg: nil},
+			want: &Memory{storage: make(map[string]map[string]string), lg: nil},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := NewMemoryStorage(tt.args.lg); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("NewMemoryStorage() = %v, want %v", got, tt.want)
+			}
 		})
 	}
 }

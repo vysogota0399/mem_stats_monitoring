@@ -46,7 +46,13 @@ type TestHandlerOpt func(h *TestHandler)
 
 func NewTestHandler(t testing.TB, opts ...TestHandlerOpt) *TestHandler {
 	t.Helper()
-	base := NewHandler()
+	base := NewHandler(
+		&PingHandler{},
+		&IndexHandler{},
+		&ShowHandler{},
+		&UpdateBatchHandler{},
+		&UpdateHandler{},
+	)
 	h := &TestHandler{Handler: base}
 	for _, f := range opts {
 		f(h)
