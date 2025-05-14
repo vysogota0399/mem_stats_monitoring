@@ -189,9 +189,10 @@ var customMetricsDefinition = []*CustomMetric{
 			}
 			defer a.repository.Release(metric)
 
-			pollCount, err = strconv.ParseUint(metric.Value, 10, 64)
+			_, _, value := a.repository.SafeRead(metric)
+			pollCount, err = strconv.ParseUint(value, 10, 64)
 			if err != nil {
-				return pollCount, fmt.Errorf("customMetricsDefinition: parse string %s error %w", metric.Value, err)
+				return pollCount, fmt.Errorf("customMetricsDefinition: parse string %s error %w", value, err)
 			}
 
 			pollCount++
