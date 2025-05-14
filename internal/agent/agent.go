@@ -9,16 +9,14 @@ import (
 
 	_ "net/http/pprof"
 
-	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/clients"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/config"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/models"
-	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/storage"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
 	"go.uber.org/zap"
 )
 
-// HTTPClient defines the interface for making HTTP requests to the metrics server
-type HTTPClient interface {
+// Adapter defines the interface for making integration with server
+type Adapter interface {
 	UpdateMetric(ctx context.Context, mType, mName, value string) error
 	UpdateMetrics(ctx context.Context, data []*models.Metric) error
 }
@@ -26,28 +24,28 @@ type HTTPClient interface {
 // Agent handles the collection and reporting of system metrics
 type Agent struct {
 	lg                   *logging.ZapLogger
-	storage              storage.Storage
 	cfg                  config.Config
-	httpClient           HTTPClient
+	reporter             Adapter
 	runtimeMetrics       []RuntimeMetric
-	customMetrics        []CustomMetric
+	customMetrics        []*CustomMetric
 	virtualMemoryMetrics []VirtualMemoryMetric
 	cpuMetrics           []CPUMetric
-	metricsPool          *MetricsPool
+	reporterPipeLock     sync.Mutex
+	repository           *MetricsRepository
 }
 
 // NewAgent creates a new Agent instance with the specified configuration
-func NewAgent(lg *logging.ZapLogger, cfg config.Config, store storage.Storage) *Agent {
+func NewAgent(lg *logging.ZapLogger, cfg config.Config, rep *MetricsRepository, adaper Adapter) *Agent {
 	return &Agent{
 		lg:                   lg,
-		storage:              store,
 		cfg:                  cfg,
-		httpClient:           clients.NewCompReporter(cfg.ServerURL, lg, &cfg, clients.NewDefaulut()),
+		reporter:             adaper,
 		runtimeMetrics:       runtimeMetricsDefinition,
 		customMetrics:        customMetricsDefinition,
 		virtualMemoryMetrics: virtualMemoryMetricsDefinition,
 		cpuMetrics:           cpuMetricsDefinition,
-		metricsPool:          NewMetricsPool(),
+		reporterPipeLock:     sync.Mutex{},
+		repository:           rep,
 	}
 }
 
@@ -83,21 +81,25 @@ func (a *Agent) startPoller(ctx context.Context, wg *sync.WaitGroup) {
 	wg.Add(1)
 
 	go func() {
-		defer wg.Done()
+		defer func() {
+			wg.Done()
+			a.lg.InfoCtx(ctx, "poller pipe done")
+		}()
 
 		pollerCtx := a.lg.WithContextFields(ctx, zap.String("actor", "poller"))
 		for {
 			select {
 			case <-pollerCtx.Done():
-				a.lg.InfoCtx(pollerCtx, "poller done with context cancellation")
+				a.lg.InfoCtx(pollerCtx, "poller done with context cancellation, do report")
+				a.runReporterPipe(ctx)
 				return
 			default:
-				a.lg.InfoCtx(pollerCtx, "poller start")
+				a.lg.DebugCtx(ctx, "poller operation started")
 				if err := a.runPollerPipe(pollerCtx); err != nil {
 					a.lg.ErrorCtx(pollerCtx, "error in poller pipe", zap.Error(err))
 				}
 
-				a.lg.DebugCtx(pollerCtx, "sleep", zap.Duration("dur", a.cfg.PollInterval))
+				a.lg.DebugCtx(ctx, "poller operation started")
 				time.Sleep(a.cfg.PollInterval)
 			}
 		}
@@ -105,20 +107,24 @@ func (a *Agent) startPoller(ctx context.Context, wg *sync.WaitGroup) {
 }
 
 // startReporter launches a goroutine that periodically sends collected metrics to the server
-func (a Agent) startReporter(ctx context.Context, wg *sync.WaitGroup) {
+func (a *Agent) startReporter(ctx context.Context, wg *sync.WaitGroup) {
 	wg.Add(1)
 
 	go func() {
-		defer wg.Done()
-
 		reporterCtx := a.lg.WithContextFields(ctx, zap.String("actor", "reporter"))
+
+		defer func() {
+			wg.Done()
+			a.lg.InfoCtx(ctx, "reporter done")
+		}()
+
 		for {
 			select {
 			case <-reporterCtx.Done():
 				a.lg.InfoCtx(reporterCtx, "reporter done with context cancellation")
 				return
 			case <-time.NewTicker(a.cfg.ReportInterval).C:
-				a.lg.InfoCtx(reporterCtx, "reporter start")
+				a.lg.DebugCtx(reporterCtx, "reporter start")
 				a.runReporterPipe(reporterCtx)
 				a.lg.DebugCtx(reporterCtx, "sleep", zap.Duration("dur", a.cfg.ReportInterval))
 			}

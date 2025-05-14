@@ -8,28 +8,46 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/server"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/models"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/repositories"
-	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storages"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
 	"go.uber.org/zap"
 )
 
+type IShowRestMetricGaugeRepository interface {
+	FindByName(ctx context.Context, name string) (models.Gauge, error)
+}
+
+type IShowRestMetricCounterRepository interface {
+	FindByName(ctx context.Context, name string) (models.Counter, error)
+}
+
+var _ IShowRestMetricGaugeRepository = (*repositories.GaugeRepository)(nil)
+var _ IShowRestMetricCounterRepository = (*repositories.CounterRepository)(nil)
+
 type ShowRestMetricHandler struct {
-	gaugeRepository   *repositories.Gauge
-	counterRepository *repositories.Counter
+	gaugeRepository   IShowRestMetricGaugeRepository
+	counterRepository IShowRestMetricCounterRepository
 	lg                *logging.ZapLogger
 }
 
-func NewShowRestMetricHandler(strg storage.Storage, lg *logging.ZapLogger) gin.HandlerFunc {
-	return showRestMetricHandlerFunc(
-		&ShowRestMetricHandler{
-			gaugeRepository:   repositories.NewGauge(strg, lg),
-			counterRepository: repositories.NewCounter(strg, lg),
-			lg:                lg,
-		},
-	)
+func NewShowRestMetricHandler(gaugeRepository IShowRestMetricGaugeRepository, counterRepository IShowRestMetricCounterRepository, lg *logging.ZapLogger) *ShowRestMetricHandler {
+	return &ShowRestMetricHandler{
+		gaugeRepository:   gaugeRepository,
+		counterRepository: counterRepository,
+		lg:                lg,
+	}
+}
+
+func (h *ShowRestMetricHandler) Registrate() (server.Route, error) {
+	return server.Route{
+		Path:    "/value/",
+		Method:  "GET",
+		Handler: h.handler(),
+	}, nil
 }
 
 type showRestMetricParams struct {
@@ -38,37 +56,37 @@ type showRestMetricParams struct {
 }
 
 type showRestMetricResponse struct {
-	ID    string   `json:"id"`              // имя метрики
-	MType string   `json:"type"`            // параметр, принимающий значение gauge или counter
-	Delta *int64   `json:"delta,omitempty"` // значение метрики в случае передачи counter
-	Value *float64 `json:"value,omitempty"` // значение метрики в случае передачи gauge
+	ID    string  `json:"id"`              // имя метрики
+	MType string  `json:"type"`            // параметр, принимающий значение gauge или counter
+	Delta int64   `json:"delta,omitempty"` // значение метрики в случае передачи counter
+	Value float64 `json:"value,omitempty"` // значение метрики в случае передачи gauge
 }
 
-func showRestMetricHandlerFunc(h *ShowRestMetricHandler) gin.HandlerFunc {
+func (h *ShowRestMetricHandler) handler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := utils.InitHandlerCtx(c, h.lg, "show_rest_metrics_handler")
-		c.Writer.Header().Add("Content-Type", "application/json")
+
 		var params showRestMetricParams
 
 		if err := c.ShouldBindJSON(&params); err != nil {
-			h.lg.DebugCtx(ctx, "Invalid params", zap.Error(err))
+			h.lg.DebugCtx(ctx, "invalid params", zap.Error(err))
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{})
 			return
 		}
 
 		response, err := h.fetchMetic(c, params.MType, params.ID)
 		if err != nil {
-			if errors.Is(err, storage.ErrNoRecords) {
+			if errors.Is(err, storages.ErrNoRecords) {
 				c.AbortWithStatusJSON(http.StatusNotFound, gin.H{})
 				return
 			}
-			h.lg.ErrorCtx(ctx, "Show metric error", zap.Error(err))
+			h.lg.ErrorCtx(ctx, "show metric error", zap.Error(err))
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{})
 			return
 		}
 
 		if err := json.NewEncoder(c.Writer).Encode(response); err != nil {
-			h.lg.ErrorCtx(ctx, "Encoding response error", zap.Error(err))
+			h.lg.ErrorCtx(ctx, "encoding response error", zap.Error(err))
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{})
 			return
 		}
@@ -77,8 +95,8 @@ func showRestMetricHandlerFunc(h *ShowRestMetricHandler) gin.HandlerFunc {
 
 func (h *ShowRestMetricHandler) fetchMetic(ctx context.Context, mType, mName string) (showRestMetricResponse, error) {
 	switch mType {
-	case gauge:
-		record, err := h.gaugeRepository.Last(ctx, mName)
+	case models.GaugeType:
+		record, err := h.gaugeRepository.FindByName(ctx, mName)
 		if err != nil {
 			return showRestMetricResponse{}, err
 		}
@@ -86,10 +104,10 @@ func (h *ShowRestMetricHandler) fetchMetic(ctx context.Context, mType, mName str
 		return showRestMetricResponse{
 			ID:    record.Name,
 			MType: models.GaugeType,
-			Value: &record.Value,
+			Value: record.Value,
 		}, nil
-	case counter:
-		record, err := h.counterRepository.Last(ctx, mName)
+	case models.CounterType:
+		record, err := h.counterRepository.FindByName(ctx, mName)
 		if err != nil {
 			return showRestMetricResponse{}, err
 		}
@@ -97,12 +115,12 @@ func (h *ShowRestMetricHandler) fetchMetic(ctx context.Context, mType, mName str
 		return showRestMetricResponse{
 			ID:    record.Name,
 			MType: models.CounterType,
-			Delta: &record.Value,
+			Delta: record.Value,
 		}, nil
 	}
 
 	return showRestMetricResponse{}, fmt.Errorf(
-		"internal/server/handlers/show_metric_handler.go: fatch mType: %s, mName: %s error",
+		"internal/server/handlers/show_rest_metric_handler.go: fetch metric error mType: %s, mName: %s",
 		mType,
 		mName,
 	)

@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -10,75 +9,103 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
-	"github.com/vysogota0399/mem_stats_monitoring/internal/mocks"
-	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storage"
+	mock "github.com/vysogota0399/mem_stats_monitoring/internal/mocks/server/storages"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/server"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/server/config"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/server/storages"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
 )
 
-type tmock func(*gomock.Controller) storage.Storage
-
-func okPingMock(ctrl *gomock.Controller) storage.Storage {
-	m := mocks.NewMockDBAble(ctrl)
-	m.EXPECT().Ping().Return(nil)
-	return m
-}
-
-func errorPingMock(ctrl *gomock.Controller) storage.Storage {
-	m := mocks.NewMockDBAble(ctrl)
-	m.EXPECT().Ping().Return(errors.New(""))
-	return m
-}
-
-func TestPingHandlerFunc(t *testing.T) {
-	lg, err := logging.MustZapLogger(-1)
-	assert.NoError(t, err)
+func TestNewPingHandler(t *testing.T) {
+	type args struct {
+		strg *mock.MockStorage
+	}
 	tests := []struct {
-		name string
-		strg tmock
-		want int
+		name           string
+		args           args
+		wantStatusCode int
+		prepare        func(*args)
 	}{
 		{
-			name: "when DBAble storage and ping returns no errors, then status 200",
-			strg: okPingMock,
-			want: http.StatusOK,
+			name: "when ping failed",
+			args: args{},
+			prepare: func(args *args) {
+				args.strg.EXPECT().Ping(gomock.Any()).Return(errors.New("ping failed"))
+			},
+			wantStatusCode: http.StatusInternalServerError,
 		},
 		{
-			name: "when DBAble storage and ping retunes errors, then status 500",
-			strg: errorPingMock,
-			want: http.StatusInternalServerError,
+			name: "when ping ok",
+			args: args{},
+			prepare: func(args *args) {
+				args.strg.EXPECT().Ping(gomock.Any()).Return(nil)
+			},
+			wantStatusCode: http.StatusOK,
+		},
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	lg, err := logging.NewZapLogger(&config.Config{LogLevel: -1})
+	assert.NoError(t, err)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := gin.Default()
+			tt.args.strg = mock.NewMockStorage(ctrl)
+			tt.prepare(&tt.args)
+			h := NewPingHandler(tt.args.strg, lg)
+			r.GET("/ping", h.handler())
+
+			srv := httptest.NewServer(r)
+			defer srv.Close()
+
+			req, err := http.NewRequest(http.MethodGet, srv.URL+"/ping", nil)
+			assert.NoError(t, err)
+
+			resp, err := srv.Client().Do(req)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.wantStatusCode, resp.StatusCode)
+			assert.NoError(t, resp.Body.Close())
+		})
+	}
+}
+
+func TestPingHandler_Registrate(t *testing.T) {
+	type fields struct {
+		strg storages.Storage
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   server.Route
+	}{
+		{
+			name: "when storage is not pg",
+			fields: fields{
+				strg: storages.NewMemory(nil),
+			},
+			want: server.Route{},
 		},
 		{
-			name: "when not DBAble storage, then status 406",
-			strg: func(ctrl *gomock.Controller) storage.Storage { return nil },
-			want: http.StatusNotAcceptable,
+			name: "when storage is pg",
+			fields: fields{
+				strg: &storages.PG{},
+			},
+			want: server.Route{
+				Path:   "/ping",
+				Method: "GET",
+			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			strg := tt.strg(ctrl)
-
-			h := NewPingHandler(strg, lg)
-			router := gin.Default()
-			router.GET("/", h)
-			r, err := http.NewRequestWithContext(context.Background(), "GET", "/", nil)
+			h := NewPingHandler(tt.fields.strg, nil)
+			route, err := h.Registrate()
 			assert.NoError(t, err)
-
-			w := httptest.NewRecorder()
-			if err != nil {
-				assert.NoError(t, err)
-			}
-
-			router.ServeHTTP(w, r)
-			resp := w.Result()
-			defer func() {
-				err := resp.Body.Close()
-				assert.NoError(t, err)
-			}()
-
-			assert.Equal(t, tt.want, resp.StatusCode)
+			assert.Equal(t, tt.want.Path, route.Path)
+			assert.Equal(t, tt.want.Method, route.Method)
 		})
 	}
 }

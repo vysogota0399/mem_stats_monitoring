@@ -13,10 +13,12 @@ import (
 	"github.com/brianvoe/gofakeit/v7"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/agent"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/config"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/models"
+	"github.com/vysogota0399/mem_stats_monitoring/internal/agent/storage"
+	mocks "github.com/vysogota0399/mem_stats_monitoring/internal/mocks/agent/clients"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
-	"go.uber.org/zap/zapcore"
 )
 
 func BenchmarkReporter_UpdateMetrics(b *testing.B) {
@@ -27,10 +29,10 @@ func BenchmarkReporter_UpdateMetrics(b *testing.B) {
 	response := &http.Response{StatusCode: http.StatusOK}
 	response.Body = io.NopCloser(bytes.NewBuffer([]byte{}))
 
-	lg, err := logging.MustZapLogger(zapcore.ErrorLevel)
+	lg, err := logging.MustZapLogger(&config.Config{LogLevel: 2})
 	assert.NoError(b, err)
 
-	reporter := NewCompReporter("", lg, &config.Config{RateLimit: 10}, client)
+	reporter := NewCompReporter("", lg, &config.Config{RateLimit: 10}, client, agent.NewMetricsRepository(storage.NewMemoryStorage(nil)))
 	ctx := context.Background()
 
 	types := []string{models.CounterType, models.CounterType}
@@ -98,7 +100,7 @@ func BenchmarkReporter_bytesreader(b *testing.B) {
 
 func TestNewReporter(t *testing.T) {
 	// Create test dependencies
-	lg, err := logging.MustZapLogger(zapcore.DebugLevel)
+	lg, err := logging.MustZapLogger(&config.Config{LogLevel: 1})
 	assert.NoError(t, err)
 
 	ctrl := gomock.NewController(t)
@@ -115,7 +117,7 @@ func TestNewReporter(t *testing.T) {
 	assert.Equal(t, address, reporter.address)
 	assert.Equal(t, lg, reporter.lg)
 	assert.Equal(t, mockClient, reporter.client)
-	assert.Equal(t, uint8(5), reporter.maxAttempts)
+	assert.Equal(t, uint8(2), reporter.maxAttempts)
 	assert.Nil(t, reporter.compressor)
 	assert.Nil(t, reporter.secretKey)
 	assert.Nil(t, reporter.semaphore)
@@ -125,7 +127,7 @@ func TestReporter_UpdateMetric(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	lg, err := logging.MustZapLogger(zapcore.DebugLevel)
+	lg, err := logging.MustZapLogger(&config.Config{LogLevel: 1})
 	assert.NoError(t, err)
 
 	type fields struct {
@@ -133,6 +135,7 @@ func TestReporter_UpdateMetric(t *testing.T) {
 		address     string
 		lg          *logging.ZapLogger
 		compressor  compressor
+		encryptor   *mocks.MockEncryptor
 		maxAttempts uint8
 		secretKey   []byte
 	}
@@ -161,6 +164,7 @@ func TestReporter_UpdateMetric(t *testing.T) {
 				compressor:  nil,
 				maxAttempts: 5,
 				secretKey:   nil,
+				encryptor:   mocks.NewMockEncryptor(ctrl),
 			},
 			args: args{
 				ctx:   context.Background(),
@@ -170,6 +174,10 @@ func TestReporter_UpdateMetric(t *testing.T) {
 			},
 			wantErr: false,
 			prepare: func(f *fields) {
+				f.encryptor.EXPECT().
+					Encrypt(gomock.Any()).
+					Return("encrypted", nil)
+
 				f.client.EXPECT().
 					Request(gomock.Any()).
 					Return(&http.Response{
@@ -187,6 +195,7 @@ func TestReporter_UpdateMetric(t *testing.T) {
 				compressor:  nil,
 				maxAttempts: 5,
 				secretKey:   nil,
+				encryptor:   mocks.NewMockEncryptor(ctrl),
 			},
 			args: args{
 				ctx:   context.Background(),
@@ -196,6 +205,10 @@ func TestReporter_UpdateMetric(t *testing.T) {
 			},
 			wantErr: false,
 			prepare: func(f *fields) {
+				f.encryptor.EXPECT().
+					Encrypt(gomock.Any()).
+					Return("encrypted", nil)
+
 				f.client.EXPECT().
 					Request(gomock.Any()).
 					Return(&http.Response{
@@ -213,6 +226,7 @@ func TestReporter_UpdateMetric(t *testing.T) {
 				compressor:  nil,
 				maxAttempts: 5,
 				secretKey:   nil,
+				encryptor:   mocks.NewMockEncryptor(ctrl),
 			},
 			args: args{
 				ctx:   context.Background(),
@@ -234,6 +248,7 @@ func TestReporter_UpdateMetric(t *testing.T) {
 				compressor:  nil,
 				secretKey:   nil,
 				maxAttempts: 1,
+				encryptor:   mocks.NewMockEncryptor(ctrl),
 			},
 			args: args{
 				ctx:   context.Background(),
@@ -243,6 +258,10 @@ func TestReporter_UpdateMetric(t *testing.T) {
 			},
 			wantErr: true,
 			prepare: func(f *fields) {
+				f.encryptor.EXPECT().
+					Encrypt(gomock.Any()).
+					Return("encrypted", nil)
+
 				f.client.EXPECT().Request(gomock.Any()).Return(nil, errors.New("request failed"))
 			},
 		},
@@ -254,6 +273,7 @@ func TestReporter_UpdateMetric(t *testing.T) {
 				lg:          lg,
 				compressor:  nil,
 				maxAttempts: 5,
+				encryptor:   mocks.NewMockEncryptor(ctrl),
 				secretKey:   nil,
 			},
 			args: args{
@@ -264,6 +284,10 @@ func TestReporter_UpdateMetric(t *testing.T) {
 			},
 			wantErr: true,
 			prepare: func(f *fields) {
+				f.encryptor.EXPECT().
+					Encrypt(gomock.Any()).
+					Return("encrypted", nil)
+
 				f.client.EXPECT().
 					Request(gomock.Any()).
 					Return(&http.Response{
@@ -285,10 +309,13 @@ func TestReporter_UpdateMetric(t *testing.T) {
 				&config.Config{
 					RateLimit:   10,
 					MaxAttempts: tt.fields.maxAttempts,
+					HTTPCert:    bytes.NewBuffer([]byte{}),
 				},
 				tt.fields.client,
+				agent.NewMetricsRepository(storage.NewMemoryStorage(nil)),
 			)
 
+			c.encryptor = tt.fields.encryptor
 			err := c.UpdateMetric(tt.args.ctx, tt.args.mType, tt.args.mName, tt.args.value)
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -303,7 +330,7 @@ func TestReporter_UpdateMetrics(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	lg, err := logging.MustZapLogger(zapcore.DebugLevel)
+	lg, err := logging.MustZapLogger(&config.Config{LogLevel: 1})
 	assert.NoError(t, err)
 
 	type fields struct {
@@ -463,8 +490,9 @@ func TestReporter_UpdateMetrics(t *testing.T) {
 					MaxAttempts: tt.fields.maxAttempts,
 				},
 				tt.fields.client,
+				agent.NewMetricsRepository(storage.NewMemoryStorage(nil)),
 			)
-
+			c.encryptor = nil
 			err := c.UpdateMetrics(tt.args.ctx, tt.args.data)
 			if tt.wantErr {
 				assert.Error(t, err)
