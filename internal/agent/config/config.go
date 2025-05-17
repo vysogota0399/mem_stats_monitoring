@@ -177,7 +177,7 @@ func (c *Config) parseFlags() error {
 	}
 
 	if flag.Lookup("grpc-port") == nil {
-		flag.StringVar(&c.GRPCPort, "grpc-port", "3200", "grpc port")
+		flag.StringVar(&c.GRPCPort, "grpc-port", "", "grpc port")
 	}
 
 	if flag.Lookup("batch-report") == nil {

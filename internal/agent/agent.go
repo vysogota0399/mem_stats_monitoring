@@ -21,6 +21,8 @@ type Adapter interface {
 	UpdateMetrics(ctx context.Context, data []*models.Metric) error
 }
 
+type resetMetric func(ctx context.Context, a *Agent) error
+
 // Agent handles the collection and reporting of system metrics
 type Agent struct {
 	lg                   *logging.ZapLogger
@@ -30,6 +32,7 @@ type Agent struct {
 	customMetrics        []*CustomMetric
 	virtualMemoryMetrics []VirtualMemoryMetric
 	cpuMetrics           []CPUMetric
+	resetMetrics         []resetMetric
 	reporterPipeLock     sync.Mutex
 	repository           *MetricsRepository
 	batchReport          bool
@@ -37,7 +40,7 @@ type Agent struct {
 
 // NewAgent creates a new Agent instance with the specified configuration
 func NewAgent(lg *logging.ZapLogger, cfg config.Config, rep *MetricsRepository, adaper Adapter) *Agent {
-	return &Agent{
+	agent := &Agent{
 		lg:                   lg,
 		cfg:                  cfg,
 		reporter:             adaper,
@@ -49,6 +52,9 @@ func NewAgent(lg *logging.ZapLogger, cfg config.Config, rep *MetricsRepository, 
 		repository:           rep,
 		batchReport:          cfg.BatchReport,
 	}
+	initResetMetrics(agent)
+
+	return agent
 }
 
 // Start launches multiple goroutines:

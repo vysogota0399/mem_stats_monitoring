@@ -15,6 +15,9 @@ import (
 // 1. Loads metrics from storage
 // 2. Sends metrics to the server
 func (a *Agent) runReporterPipe(ctx context.Context) {
+	a.reporterPipeLock.Lock()
+	defer a.reporterPipeLock.Unlock()
+
 	operationID := uuid.NewV4()
 	ctx = a.lg.WithContextFields(ctx, zap.String("operation_id", operationID.String()))
 
@@ -24,6 +27,12 @@ func (a *Agent) runReporterPipe(ctx context.Context) {
 
 	if err := g.Wait(); err != nil {
 		a.lg.ErrorCtx(ctx, "report failed", zap.Error(err))
+	}
+
+	for _, f := range a.resetMetrics {
+		if err := f(ctx, a); err != nil {
+			a.lg.ErrorCtx(ctx, "reset metric failed", zap.Error(err))
+		}
 	}
 
 	a.lg.InfoCtx(ctx, "finished")
