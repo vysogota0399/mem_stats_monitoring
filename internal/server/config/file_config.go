@@ -13,7 +13,7 @@ type FileConfig struct {
 	FileStoragePath string `json:"file_storage_path"`
 	DatabaseDSN     string `json:"database_dsn"`
 	PrivateKey      string `json:"crypto_key"`
-	TrustedSubnet      string `json:"trusted_subnet"`
+	TrustedSubnet   string `json:"trusted_subnet"`
 }
 
 func NewFileConfig() *FileConfig {

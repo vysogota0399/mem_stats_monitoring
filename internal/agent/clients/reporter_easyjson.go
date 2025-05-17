@@ -4,6 +4,7 @@ package clients
 
 import (
 	json "encoding/json"
+
 	easyjson "github.com/mailru/easyjson"
 	jlexer "github.com/mailru/easyjson/jlexer"
 	jwriter "github.com/mailru/easyjson/jwriter"
@@ -54,9 +55,8 @@ func easyjsonF860cb9bEncodeGithubComVysogota0399MemStatsMonitoringInternalAgentC
 	}
 	out.RawByte('}')
 }
+
 // MarshalEasyJSON supports easyjson.Marshaler interface
 func (v MetricsBodyAlias) MarshalEasyJSON(w *jwriter.Writer) {
 	easyjsonF860cb9bEncodeGithubComVysogota0399MemStatsMonitoringInternalAgentClients2(w, v)
 }
-
-
