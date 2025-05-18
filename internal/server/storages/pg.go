@@ -184,25 +184,6 @@ type txCtxKey string
 var txKey txCtxKey = "tx"
 
 func (pg *PG) GetGauge(ctx context.Context, record *models.Gauge) error {
-	var (
-		tx         *sql.Tx
-		err        error
-		isParentTx bool
-	)
-	tx, isParentTx = ctx.Value(txKey).(*sql.Tx)
-	if !isParentTx {
-		tx, err = pg.db.BeginTx(ctx, nil)
-		if err != nil {
-			return fmt.Errorf("pg: begin tx failed error %w", err)
-		}
-
-		defer func() {
-			if rlberr := tx.Rollback(); rlberr != nil {
-				return
-			}
-		}()
-	}
-
 	query := `
 		SELECT value, id, name
 		FROM gauges
@@ -213,7 +194,7 @@ func (pg *PG) GetGauge(ctx context.Context, record *models.Gauge) error {
 	dbCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	rows, err := tx.QueryContext(dbCtx, query, record.Name)
+	rows, err := pg.db.QueryContext(dbCtx, query, record.Name)
 	if err != nil {
 		return fmt.Errorf("pg: get gauge failed error %w", err)
 	}
@@ -240,35 +221,10 @@ func (pg *PG) GetGauge(ctx context.Context, record *models.Gauge) error {
 		return ErrNoRecords
 	}
 
-	if !isParentTx {
-		if err := tx.Commit(); err != nil {
-			return fmt.Errorf("pg: commit tx failed error %w", err)
-		}
-	}
-
 	return nil
 }
 
 func (pg *PG) GetCounter(ctx context.Context, record *models.Counter) error {
-	var (
-		tx         *sql.Tx
-		err        error
-		isParentTx bool
-	)
-	tx, isParentTx = ctx.Value(txKey).(*sql.Tx)
-	if !isParentTx {
-		tx, err = pg.db.BeginTx(ctx, nil)
-		if err != nil {
-			return fmt.Errorf("pg: begin tx failed error %w", err)
-		}
-
-		defer func() {
-			if rlberr := tx.Rollback(); rlberr != nil {
-				return
-			}
-		}()
-	}
-
 	query := `
 		SELECT value, id, name
 		FROM counters
@@ -279,7 +235,7 @@ func (pg *PG) GetCounter(ctx context.Context, record *models.Counter) error {
 	dbCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	rows, err := tx.QueryContext(dbCtx, query, record.Name)
+	rows, err := pg.db.QueryContext(dbCtx, query, record.Name)
 	if err != nil {
 		return fmt.Errorf("pg: get counter failed error %w", err)
 	}
@@ -305,38 +261,13 @@ func (pg *PG) GetCounter(ctx context.Context, record *models.Counter) error {
 		return ErrNoRecords
 	}
 
-	if !isParentTx {
-		if err := tx.Commit(); err != nil {
-			return fmt.Errorf("pg: commit tx failed error %w", err)
-		}
-	}
-
 	return nil
 }
 
 func (pg *PG) GetGauges(ctx context.Context) ([]models.Gauge, error) {
-	var (
-		tx         *sql.Tx
-		err        error
-		isParentTx bool
-	)
-	tx, isParentTx = ctx.Value(txKey).(*sql.Tx)
-	if !isParentTx {
-		tx, err = pg.db.BeginTx(ctx, nil)
-		if err != nil {
-			return nil, fmt.Errorf("pg: begin tx failed error %w", err)
-		}
-
-		defer func() {
-			if rlberr := tx.Rollback(); rlberr != nil {
-				return
-			}
-		}()
-	}
-
 	gauges := make([]models.Gauge, 0)
 
-	rows, err := tx.QueryContext(ctx, `
+	rows, err := pg.db.QueryContext(ctx, `
 		SELECT id, name, value
 		FROM gauges
 		ORDER BY id DESC
@@ -363,38 +294,13 @@ func (pg *PG) GetGauges(ctx context.Context) ([]models.Gauge, error) {
 		return []models.Gauge{}, fmt.Errorf("pg: close rows err %w", err)
 	}
 
-	if !isParentTx {
-		if err := tx.Commit(); err != nil {
-			return nil, fmt.Errorf("pg: commit tx failed error %w", err)
-		}
-	}
-
 	return gauges, nil
 }
 
 func (pg *PG) GetCounters(ctx context.Context) ([]models.Counter, error) {
-	var (
-		tx         *sql.Tx
-		err        error
-		isParentTx bool
-	)
-	tx, isParentTx = ctx.Value(txKey).(*sql.Tx)
-	if !isParentTx {
-		tx, err = pg.db.BeginTx(ctx, nil)
-		if err != nil {
-			return nil, fmt.Errorf("pg: begin tx failed error %w", err)
-		}
-
-		defer func() {
-			if rlberr := tx.Rollback(); rlberr != nil {
-				return
-			}
-		}()
-	}
-
 	counters := make([]models.Counter, 0)
 
-	rows, err := tx.QueryContext(ctx, `
+	rows, err := pg.db.QueryContext(ctx, `
 		SELECT id, name, value
 		FROM counters
 		ORDER BY id DESC
@@ -422,12 +328,6 @@ func (pg *PG) GetCounters(ctx context.Context) ([]models.Counter, error) {
 
 	if err := rows.Err(); err != nil {
 		return []models.Counter{}, fmt.Errorf("pg: close rows err %w", err)
-	}
-
-	if !isParentTx {
-		if err := tx.Commit(); err != nil {
-			return nil, fmt.Errorf("pg: commit tx failed error %w", err)
-		}
 	}
 
 	return counters, nil
@@ -460,4 +360,72 @@ func (pg *PG) Tx(ctx context.Context, fns ...func(ctx context.Context) error) er
 	}
 
 	return tx.Commit()
+}
+
+func (pg *PG) IncrementCounter(ctx context.Context, name string, delta int64) error {
+	selectQuery := `
+		SELECT value
+		FROM counters
+		WHERE name = $1
+		ORDER BY id DESC
+		LIMIT 1
+		FOR UPDATE
+	`
+
+	tx, err := pg.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("pg: begin tx failed error %w", err)
+	}
+	defer func() {
+		if rlberr := tx.Rollback(); rlberr != nil {
+			return
+		}
+	}()
+
+	row := tx.QueryRowContext(ctx, selectQuery, name)
+
+	var value int64
+
+	if scanErr := row.Scan(&value); scanErr != nil {
+		if errors.Is(scanErr, sql.ErrNoRows) {
+			insertQuery := `
+				INSERT INTO counters (name, value)
+				VALUES ($1, $2)
+			`
+
+			_, execErr := tx.ExecContext(ctx, insertQuery, name, delta)
+			if execErr != nil {
+				return fmt.Errorf("pg: increment counter failed error %w", execErr)
+			}
+
+			if txErr := tx.Commit(); txErr != nil {
+				return fmt.Errorf("pg: commit tx failed error %w", txErr)
+			}
+
+			return nil
+		}
+
+		return fmt.Errorf("pg: increment counter %s with delta %d failed error %w", name, delta, err)
+	}
+
+	if rowErr := row.Err(); rowErr != nil {
+		return fmt.Errorf("pg: increment counter %s with delta %d failed error %w", name, delta, rowErr)
+	}
+
+	updateQuery := `
+		UPDATE counters
+		SET value = $1
+		WHERE name = $2
+	`
+
+	_, execErr := tx.ExecContext(ctx, updateQuery, value+delta, name)
+	if execErr != nil {
+		return fmt.Errorf("pg: increment counter %s with delta %d failed error %w", name, delta, execErr)
+	}
+
+	if txErr := tx.Commit(); txErr != nil {
+		return fmt.Errorf("pg: commit tx failed error %w", txErr)
+	}
+
+	return nil
 }

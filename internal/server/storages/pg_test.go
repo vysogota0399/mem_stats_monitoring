@@ -629,3 +629,78 @@ func TestPG_Tx(t *testing.T) {
 		})
 	}
 }
+
+func TestPG_IncrementCounter(t *testing.T) {
+	lg, err := logging.MustZapLogger(&config.Config{LogLevel: -1})
+	assert.NoError(t, err)
+
+	type args struct {
+		ctx   context.Context
+		name  string
+		delta int64
+	}
+	tests := []struct {
+		name             string
+		args             args
+		prepare          func(*PG) error
+		wantErr          bool
+		wantCounterValue int64
+	}{
+		{
+			name: "when counter exists",
+			args: args{
+				ctx:   context.Background(),
+				name:  "test_counter",
+				delta: 42,
+			},
+			prepare: func(p *PG) error {
+				return p.CreateOrUpdate(context.Background(), models.CounterType, "test_counter", int64(10))
+			},
+			wantErr:          false,
+			wantCounterValue: 52,
+		},
+		{
+			name: "when counter does not exist",
+			args: args{
+				ctx:   context.Background(),
+				name:  "new_counter",
+				delta: 42,
+			},
+			prepare:          func(p *PG) error { return nil },
+			wantErr:          false,
+			wantCounterValue: 42,
+		},
+		{
+			name: "when db is closed",
+			args: args{
+				ctx:   context.Background(),
+				name:  "test_counter",
+				delta: 42,
+			},
+			prepare: func(p *PG) error {
+				return p.db.Close()
+			},
+			wantErr:          true,
+			wantCounterValue: 0,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pg := initPG(t, lg)
+			if err := tt.prepare(pg); err != nil {
+				t.Fatalf("prepare failed: %v", err)
+			}
+			err := pg.IncrementCounter(tt.args.ctx, tt.args.name, tt.args.delta)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				// Verify the counter value after increment
+				counter := &models.Counter{Name: tt.args.name}
+				err = pg.GetCounter(tt.args.ctx, counter)
+				assert.NoError(t, err)
+				assert.Equal(t, tt.wantCounterValue, counter.Value) // 10 + 42
+			}
+		})
+	}
+}

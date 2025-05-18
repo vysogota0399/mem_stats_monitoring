@@ -2,7 +2,6 @@ package repositories
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/models"
@@ -17,7 +16,6 @@ type ICounterRepository interface {
 	FindByName(ctx context.Context, mName string) (models.Counter, error)
 	All(ctx context.Context) ([]models.Counter, error)
 	SaveCollection(ctx context.Context, coll []*models.Counter) error
-	SearchByName(ctx context.Context, names []string) ([]models.Counter, error)
 }
 
 // CounterRepository отвечает за связь уровня бизнес логики и persistence layer в контексте работы с Counter.
@@ -33,27 +31,9 @@ func NewCounterRepository(strg storages.Storage, lg *logging.ZapLogger) *Counter
 	}
 }
 
-// Create сохраняет новую запись в хранилище.
+// Create increments counter by value
 func (rep *CounterRepository) Create(ctx context.Context, cntr *models.Counter) error {
-	record := models.Counter{
-		Name: cntr.Name,
-	}
-
-	return rep.storage.Tx(ctx, func(ctx context.Context) error {
-		if err := rep.storage.GetCounter(ctx, &record); err != nil {
-			if !errors.Is(err, storages.ErrNoRecords) {
-				return fmt.Errorf("counter_repository.go: Create get counter error %w", err)
-			}
-		}
-
-		cntr.Value += record.Value
-
-		if err := rep.storage.CreateOrUpdate(ctx, models.CounterType, cntr.Name, cntr.Value); err != nil {
-			return fmt.Errorf("counter_repository.go: create or update counter error %w", err)
-		}
-
-		return nil
-	})
+	return rep.storage.IncrementCounter(ctx, cntr.Name, cntr.Value)
 }
 
 // FindByName возвращает запись из хранилища по имени.
@@ -86,48 +66,9 @@ func (rep *CounterRepository) SaveCollection(ctx context.Context, coll []models.
 
 	for _, cntr := range coll {
 		operations = append(operations, func(repCtx context.Context) error {
-			record := models.Counter{
-				Name: cntr.Name,
-			}
-
-			if err := rep.storage.GetCounter(repCtx, &record); err != nil {
-				if !errors.Is(err, storages.ErrNoRecords) {
-					return fmt.Errorf("counter_repository.go: SaveCollection get counter error %+v %w", record, err)
-				}
-			}
-
-			cntr.Value += record.Value
-
-			return rep.storage.CreateOrUpdate(repCtx, models.CounterType, cntr.Name, cntr.Value)
+			return rep.storage.IncrementCounter(repCtx, cntr.Name, cntr.Value)
 		})
 	}
 
 	return rep.storage.Tx(repCtx, operations...)
-}
-
-// SearchByName осуществляет поиск записей по имени.
-func (rep *CounterRepository) SearchByName(ctx context.Context, names []string) ([]models.Counter, error) {
-	operations := make([]func(ctx context.Context) error, 0, len(names))
-	records := make([]models.Counter, 0, len(names))
-
-	for _, name := range names {
-		operations = append(operations, func(ctx context.Context) error {
-			cntr := models.Counter{
-				Name: name,
-			}
-
-			if err := rep.storage.GetCounter(ctx, &cntr); err != nil {
-				return fmt.Errorf("counter_repository.go: SearchByName get counter error %w", err)
-			}
-
-			records = append(records, cntr)
-			return nil
-		})
-	}
-
-	if err := rep.storage.Tx(ctx, operations...); err != nil {
-		return nil, fmt.Errorf("counter_repository.go: tx error %w", err)
-	}
-
-	return records, nil
 }
