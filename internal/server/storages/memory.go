@@ -2,6 +2,7 @@ package storages
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -177,5 +178,29 @@ func (m *Memory) Tx(ctx context.Context, fns ...func(ctx context.Context) error)
 	}
 
 	m.lg.DebugCtx(txCtx, "[UNLOCK] tx succeeded")
+	return nil
+}
+
+func (m *Memory) IncrementCounter(ctx context.Context, name string, delta int64) error {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	txCtx := context.WithValue(ctx, txInProgressKey, struct{}{})
+
+	counter := models.Counter{Name: name}
+
+	// if counter not found, it will be created with delta value
+	// otherwise, it will be incremented by delta
+	if err := m.GetCounter(txCtx, &counter); err != nil {
+		if !errors.Is(err, ErrNoRecords) {
+			return fmt.Errorf("memory: increment counter %s with delta %d failed error %w", name, delta, err)
+		}
+	}
+
+	counter.Value += delta
+	if err := m.CreateOrUpdate(txCtx, models.CounterType, name, counter.Value); err != nil {
+		return fmt.Errorf("memory: increment counter %s with delta %d failed error %w", name, delta, err)
+	}
+
 	return nil
 }

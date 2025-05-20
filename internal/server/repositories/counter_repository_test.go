@@ -60,40 +60,26 @@ func TestCounterRepository_Create(t *testing.T) {
 		want    *models.Counter
 	}{
 		{
-			name: "when get counter error",
+			name: "when failed",
 			prepare: func(fields *fields) {
-				fields.storage.EXPECT().GetCounter(gomock.Any(), gomock.Any()).Return(errors.New("get counter error"))
+				fields.storage.EXPECT().IncrementCounter(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("increment counter error"))
 			},
 			fields: fields{
 				actual: &models.Counter{Name: "test", Value: 1},
 			},
 			wantErr: true,
 		},
-		{
-			name: "when create or update counter error",
-			prepare: func(fields *fields) {
-				fields.storage.EXPECT().GetCounter(gomock.Any(), gomock.Any()).Return(nil)
-				fields.storage.EXPECT().CreateOrUpdate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("create or update counter error"))
-			},
-			fields: fields{
-				actual: &models.Counter{Name: "test", Value: 1},
-			},
-			wantErr: true,
-		},
+
 		{
 			name: "when ok",
 			prepare: func(fields *fields) {
-				fields.storage.EXPECT().GetCounter(gomock.Any(), gomock.Any())
-				fields.storage.EXPECT().CreateOrUpdate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, mType, mName string, val any) error {
-					fields.actual.Value++
-					return nil
-				})
+				fields.storage.EXPECT().IncrementCounter(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 			},
 			fields: fields{
 				actual: &models.Counter{Name: "test", Value: 1},
 			},
 			wantErr: false,
-			want:    &models.Counter{Name: "test", Value: 2},
+			want:    &models.Counter{Name: "test", Value: 1},
 		},
 	}
 	lg, err := logging.MustZapLogger(&config.Config{LogLevel: -1})
@@ -228,20 +214,9 @@ func TestCounterRepository_SaveCollection(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "when search by name error",
-			prepare: func(fields *fields) {
-				fields.storage.EXPECT().GetCounter(gomock.Any(), gomock.Any()).Return(errors.New("get counter error"))
-				fields.storage.EXPECT().Tx(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, fn func(ctx context.Context) error) error {
-					return fn(ctx)
-				})
-			},
-			wantErr: true,
-		},
-		{
 			name: "when save collection error",
 			prepare: func(fields *fields) {
-				fields.storage.EXPECT().GetCounter(gomock.Any(), gomock.Any()).Return(nil)
-				fields.storage.EXPECT().CreateOrUpdate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("create or update counter error"))
+				fields.storage.EXPECT().IncrementCounter(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("increment counter error"))
 				fields.storage.EXPECT().Tx(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, fn func(ctx context.Context) error) error {
 					return fn(ctx)
 				})
@@ -251,7 +226,10 @@ func TestCounterRepository_SaveCollection(t *testing.T) {
 		{
 			name: "when ok",
 			prepare: func(fields *fields) {
-				fields.storage.EXPECT().Tx(gomock.Any(), gomock.Any()).Return(nil)
+				fields.storage.EXPECT().IncrementCounter(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+				fields.storage.EXPECT().Tx(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, fn func(ctx context.Context) error) error {
+					return fn(ctx)
+				})
 			},
 			wantErr: false,
 		},
@@ -272,60 +250,6 @@ func TestCounterRepository_SaveCollection(t *testing.T) {
 			err := rep.SaveCollection(context.Background(), []models.Counter{
 				{Name: "test", Value: 1},
 			})
-			if tt.wantErr {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-			}
-		})
-	}
-}
-
-func TestCounterRepository_SearchByName(t *testing.T) {
-	type fields struct {
-		storage *mock.MockStorage
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		prepare func(fields *fields)
-		wantErr bool
-	}{
-		{
-			name: "when search by name error",
-			prepare: func(fields *fields) {
-				fields.storage.EXPECT().GetCounter(gomock.Any(), gomock.Any()).Return(errors.New("get counter error"))
-				fields.storage.EXPECT().Tx(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, fn func(ctx context.Context) error) error {
-					return fn(ctx)
-				})
-			},
-			wantErr: true,
-		},
-		{
-			name: "when ok",
-			prepare: func(fields *fields) {
-				fields.storage.EXPECT().GetCounter(gomock.Any(), gomock.Any()).Return(nil)
-				fields.storage.EXPECT().Tx(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, fn func(ctx context.Context) error) error {
-					return fn(ctx)
-				})
-			},
-			wantErr: false,
-		},
-	}
-
-	cntr := gomock.NewController(t)
-	defer cntr.Finish()
-
-	lg, err := logging.MustZapLogger(&config.Config{LogLevel: -1})
-	assert.NoError(t, err)
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tt.fields.storage = mock.NewMockStorage(cntr)
-			tt.prepare(&tt.fields)
-
-			rep := NewCounterRepository(tt.fields.storage, lg)
-			_, err := rep.SearchByName(context.Background(), []string{"test"})
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {

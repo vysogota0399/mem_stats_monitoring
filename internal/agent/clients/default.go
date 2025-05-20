@@ -7,7 +7,9 @@ type Default struct {
 }
 
 func NewDefaulut() *Default {
-	return &Default{client: http.Client{}}
+	return &Default{client: http.Client{
+		Transport: http.DefaultTransport,
+	}}
 }
 
 func (http *Default) Request(r *http.Request) (*http.Response, error) {

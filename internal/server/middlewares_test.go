@@ -7,10 +7,12 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
@@ -37,16 +39,7 @@ func Test_signerMiddleware(t *testing.T) {
 		request        func(ctx context.Context, f *fields)
 		wantStatusCode int
 	}{
-		{
-			name:           "when skip signature",
-			wantStatusCode: http.StatusOK,
-			fields: fields{
-				cfg: config.Config{
-					Key: "",
-				},
-				headers: func(*fields) map[string]string { return map[string]string{} },
-			},
-		},
+
 		{
 			name:           "when invalid signature",
 			wantStatusCode: http.StatusBadRequest,
@@ -88,7 +81,7 @@ func Test_signerMiddleware(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := gin.Default()
-			r.Use(signerMiddleware(lg, &tt.fields.cfg))
+			r.Use(signerMiddleware(lg, []byte(tt.fields.cfg.Key)))
 			r.GET("/", func(c *gin.Context) {
 				c.Status(http.StatusOK)
 			})
@@ -219,14 +212,6 @@ func Test_decrypterMiddleware(t *testing.T) {
 		prepare        func(*args)
 	}{
 		{
-			name: "when private key is nil",
-			args: args{
-				cfg: &config.Config{},
-			},
-			prepare:        func(args *args) {},
-			wantStatusCode: http.StatusOK,
-		},
-		{
 			name: "when decrypt failed",
 			args: args{
 				cfg: &config.Config{
@@ -266,7 +251,7 @@ func Test_decrypterMiddleware(t *testing.T) {
 			tt.args.decrypter = server.NewMockDecrypter(ctrl)
 			tt.prepare(&tt.args)
 
-			r.Use(decrypterMiddleware(lg, tt.args.cfg, tt.args.decrypter))
+			r.Use(decrypterMiddleware(lg, tt.args.decrypter))
 			r.GET("/", func(c *gin.Context) {
 				c.Status(http.StatusOK)
 			})
@@ -278,6 +263,144 @@ func Test_decrypterMiddleware(t *testing.T) {
 				"GET",
 				srv.URL,
 				nil)
+			assert.NoError(t, err)
+			resp, err := srv.Client().Do(req)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.wantStatusCode, resp.StatusCode)
+			assert.NoError(t, resp.Body.Close())
+		})
+	}
+}
+
+func Test_middlewares(t *testing.T) {
+	type args struct {
+		cfg *config.Config
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    []gin.HandlerFunc
+		wantErr bool
+	}{
+		{
+			name: "default",
+			args: args{cfg: &config.Config{}},
+			want: []gin.HandlerFunc{
+				gin.Recovery(),
+				headerMiddleware(),
+				httpLoggerMiddleware(nil),
+				gzip.Gzip(gzip.DefaultCompression),
+			},
+		},
+		{
+			name: "when private key present",
+			args: args{cfg: &config.Config{PrivateKey: &bytes.Buffer{}}},
+			want: []gin.HandlerFunc{
+				gin.Recovery(),
+				headerMiddleware(),
+				httpLoggerMiddleware(nil),
+				gzip.Gzip(gzip.DefaultCompression),
+				decrypterMiddleware(nil, nil),
+			},
+		},
+		{
+			name: "when cms key present",
+			args: args{cfg: &config.Config{Key: "secret"}},
+			want: []gin.HandlerFunc{
+				gin.Recovery(),
+				headerMiddleware(),
+				httpLoggerMiddleware(nil),
+				gzip.Gzip(gzip.DefaultCompression),
+				signerMiddleware(nil, []byte("")),
+			},
+		},
+		{
+			name: "when trusted subnet present",
+			args: args{cfg: &config.Config{TrustedSubnet: "192.168.0.1/24"}},
+			want: []gin.HandlerFunc{
+				gin.Recovery(),
+				headerMiddleware(),
+				httpLoggerMiddleware(nil),
+				gzip.Gzip(gzip.DefaultCompression),
+				aclMiddleware(nil, nil),
+			},
+		},
+		{
+			name: "when trusted subnet invalid",
+			args: args{cfg: &config.Config{TrustedSubnet: "192.168.0/24"}},
+			want: []gin.HandlerFunc{
+				gin.Recovery(),
+				headerMiddleware(),
+				httpLoggerMiddleware(nil),
+				gzip.Gzip(gzip.DefaultCompression),
+				aclMiddleware(nil, nil),
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := middlewares(tt.args.cfg, nil, nil)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, len(tt.want), len(got))
+			}
+		})
+	}
+}
+
+func Test_aclMiddleware(t *testing.T) {
+	tests := []struct {
+		name           string
+		ip             string
+		wantStatusCode int
+	}{
+		{
+			name:           "when ip is blank",
+			wantStatusCode: http.StatusForbidden,
+		},
+		{
+			name:           "when ip invalid",
+			ip:             "123",
+			wantStatusCode: http.StatusForbidden,
+		},
+		{
+			name:           "when ip does not belond to network",
+			ip:             "192.168.1.1",
+			wantStatusCode: http.StatusForbidden,
+		},
+	}
+
+	lg, err := logging.NewZapLogger(&config.Config{LogLevel: -1})
+	if err != nil {
+		t.Fatalf("failed to create zap logger: %v", err)
+	}
+
+	_, ipnet, err := net.ParseCIDR("192.168.0.1/24")
+	assert.NoError(t, err)
+	mw := aclMiddleware(lg, ipnet)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := gin.Default()
+
+			r.Use(mw)
+			r.GET("/", func(c *gin.Context) {
+				c.Status(http.StatusOK)
+			})
+
+			srv := httptest.NewServer(r)
+			defer srv.Close()
+
+			req, err := http.NewRequest(
+				"GET",
+				srv.URL,
+				nil)
+			req.Header.Add(XRealIPHeader, tt.ip)
+
 			assert.NoError(t, err)
 			resp, err := srv.Client().Do(req)
 			assert.NoError(t, err)

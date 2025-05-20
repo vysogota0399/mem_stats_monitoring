@@ -92,18 +92,3 @@ func (mr *MockICounterRepositoryMockRecorder) SaveCollection(arg0, arg1 interfac
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveCollection", reflect.TypeOf((*MockICounterRepository)(nil).SaveCollection), arg0, arg1)
 }
-
-// SearchByName mocks base method.
-func (m *MockICounterRepository) SearchByName(arg0 context.Context, arg1 []string) ([]models.Counter, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SearchByName", arg0, arg1)
-	ret0, _ := ret[0].([]models.Counter)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// SearchByName indicates an expected call of SearchByName.
-func (mr *MockICounterRepositoryMockRecorder) SearchByName(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SearchByName", reflect.TypeOf((*MockICounterRepository)(nil).SearchByName), arg0, arg1)
-}

@@ -51,7 +51,7 @@ func (m *GooseMigrator) Migrate(db *sql.DB) error {
 }
 
 type ConnectionOpener interface {
-	OpenDB(ctx context.Context, dbDsn string) (*sql.DB, error)
+	OpenDB(ctx context.Context) (*sql.DB, error)
 }
 
 type PGConnectionOpener struct {
@@ -72,9 +72,9 @@ func NewPGConnectionOpener(lg *logging.ZapLogger, cfg *config.Config) *PGConnect
 
 const pgxDriver string = "pgx"
 
-func (o *PGConnectionOpener) OpenDB(ctx context.Context, dbDsn string) (*sql.DB, error) {
+func (o *PGConnectionOpener) OpenDB(ctx context.Context) (*sql.DB, error) {
 	o.atpt++
-	db, err := sql.Open(pgxDriver, dbDsn)
+	db, err := sql.Open(pgxDriver, o.dbDsn)
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +87,7 @@ func (o *PGConnectionOpener) OpenDB(ctx context.Context, dbDsn string) (*sql.DB,
 
 		if errors.As(err, &pgErr) && pgerrcode.IsConnectionException(pgErr.Code) && o.atpt <= o.maxOpenRetries {
 			time.Sleep(time.Duration(utils.Delay(o.atpt)) * time.Second)
-			return o.OpenDB(ctx, o.dbDsn)
+			return o.OpenDB(ctx)
 		}
 
 		return nil, err
@@ -114,7 +114,7 @@ func NewPG(
 	migrator Migrator,
 	connectionOpener ConnectionOpener,
 ) (*PG, error) {
-	db, err := connectionOpener.OpenDB(context.Background(), cfg.DatabaseDSN)
+	db, err := connectionOpener.OpenDB(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -179,6 +179,10 @@ func (pg *PG) CreateOrUpdate(ctx context.Context, mType, mName string, val any) 
 	return nil
 }
 
+type txCtxKey string
+
+var txKey txCtxKey = "tx"
+
 func (pg *PG) GetGauge(ctx context.Context, record *models.Gauge) error {
 	query := `
 		SELECT value, id, name
@@ -200,12 +204,21 @@ func (pg *PG) GetGauge(ctx context.Context, record *models.Gauge) error {
 		}
 	}()
 
-	if err := rows.Scan(&record.Value, &record.ID, &record.Name); err != nil {
-		return fmt.Errorf("pg: get gauge failed error %w", err)
+	var rowsCount int64
+	for rows.Next() {
+		if err := rows.Scan(&record.Value, &record.ID, &record.Name); err != nil {
+			return fmt.Errorf("pg: get gauge failed error %w", err)
+		}
+
+		rowsCount++
 	}
 
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("pg: close rows err %w", err)
+	}
+
+	if rowsCount == 0 {
+		return ErrNoRecords
 	}
 
 	return nil
@@ -232,14 +245,20 @@ func (pg *PG) GetCounter(ctx context.Context, record *models.Counter) error {
 		}
 	}()
 
+	var rowsCount int64
 	for rows.Next() {
 		if err := rows.Scan(&record.Value, &record.ID, &record.Name); err != nil {
 			return fmt.Errorf("pg: get counter failed error %w", err)
 		}
+		rowsCount++
 	}
 
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("pg: close rows err %w", err)
+	}
+
+	if rowsCount == 0 {
+		return ErrNoRecords
 	}
 
 	return nil
@@ -328,6 +347,8 @@ func (pg *PG) Tx(ctx context.Context, fns ...func(ctx context.Context) error) er
 		return fmt.Errorf("pg: begin tx failed error %w", err)
 	}
 
+	ctx = context.WithValue(ctx, txKey, tx)
+
 	for _, fn := range fns {
 		if err := fn(ctx); err != nil {
 			if rberr := tx.Rollback(); rberr != nil {
@@ -339,4 +360,72 @@ func (pg *PG) Tx(ctx context.Context, fns ...func(ctx context.Context) error) er
 	}
 
 	return tx.Commit()
+}
+
+func (pg *PG) IncrementCounter(ctx context.Context, name string, delta int64) error {
+	selectQuery := `
+		SELECT value
+		FROM counters
+		WHERE name = $1
+		ORDER BY id DESC
+		LIMIT 1
+		FOR UPDATE
+	`
+
+	tx, err := pg.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("pg: begin tx failed error %w", err)
+	}
+	defer func() {
+		if rlberr := tx.Rollback(); rlberr != nil {
+			return
+		}
+	}()
+
+	row := tx.QueryRowContext(ctx, selectQuery, name)
+
+	var value int64
+
+	if scanErr := row.Scan(&value); scanErr != nil {
+		if errors.Is(scanErr, sql.ErrNoRows) {
+			insertQuery := `
+				INSERT INTO counters (name, value)
+				VALUES ($1, $2)
+			`
+
+			_, execErr := tx.ExecContext(ctx, insertQuery, name, delta)
+			if execErr != nil {
+				return fmt.Errorf("pg: increment counter failed error %w", execErr)
+			}
+
+			if txErr := tx.Commit(); txErr != nil {
+				return fmt.Errorf("pg: commit tx failed error %w", txErr)
+			}
+
+			return nil
+		}
+
+		return fmt.Errorf("pg: increment counter %s with delta %d failed error %w", name, delta, err)
+	}
+
+	if rowErr := row.Err(); rowErr != nil {
+		return fmt.Errorf("pg: increment counter %s with delta %d failed error %w", name, delta, rowErr)
+	}
+
+	updateQuery := `
+		UPDATE counters
+		SET value = $1
+		WHERE name = $2
+	`
+
+	_, execErr := tx.ExecContext(ctx, updateQuery, value+delta, name)
+	if execErr != nil {
+		return fmt.Errorf("pg: increment counter %s with delta %d failed error %w", name, delta, execErr)
+	}
+
+	if txErr := tx.Commit(); txErr != nil {
+		return fmt.Errorf("pg: commit tx failed error %w", txErr)
+	}
+
+	return nil
 }

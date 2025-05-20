@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"crypto/rand"
 	"errors"
 	"fmt"
@@ -28,6 +29,7 @@ type RuntimeMetric struct {
 	Name          string
 	Type          string
 	generateValue MemValueGenerator
+	Reset         resetMetric
 }
 
 // Load loads the metric value from storage
@@ -160,6 +162,7 @@ type CustomMetric struct {
 	Type          string
 	lock          sync.Mutex
 	generateValue func(*CustomMetric, *Agent) (uint64, error)
+	Reset         resetMetric
 }
 
 func (c *CustomMetric) Load(rep *MetricsRepository) (*models.Metric, error) {
@@ -169,7 +172,7 @@ func (c *CustomMetric) Load(rep *MetricsRepository) (*models.Metric, error) {
 var customMetricsDefinition = []*CustomMetric{
 	{
 		Name: "PollCount",
-		Type: "counter",
+		Type: models.CounterType,
 		lock: sync.Mutex{},
 		generateValue: func(m *CustomMetric, a *Agent) (uint64, error) {
 			var pollCount uint64
@@ -189,14 +192,24 @@ var customMetricsDefinition = []*CustomMetric{
 			}
 			defer a.repository.Release(metric)
 
-			pollCount, err = strconv.ParseUint(metric.Value, 10, 64)
+			_, _, value := a.repository.SafeRead(metric)
+			pollCount, err = strconv.ParseUint(value, 10, 64)
 			if err != nil {
-				return pollCount, fmt.Errorf("customMetricsDefinition: parse string %s error %w", metric.Value, err)
+				return pollCount, fmt.Errorf("customMetricsDefinition: parse string %s error %w", value, err)
 			}
 
 			pollCount++
 
 			return pollCount, nil
+		},
+		Reset: func(ctx context.Context, a *Agent) error {
+			metric, err := a.repository.Get("PollCount", models.CounterType)
+			if err != nil {
+				return fmt.Errorf("customMetricsDefinition: reset metric failed error: %w", err)
+			}
+			metric.Value = "0"
+
+			return a.repository.SaveAndRelease(ctx, metric)
 		},
 	},
 	{
@@ -218,6 +231,7 @@ type VirtualMemoryMetric struct {
 	Name          string
 	Type          string
 	generateValue func(*mem.VirtualMemoryStat) uint64
+	Reset         resetMetric
 }
 
 func (c VirtualMemoryMetric) Load(rep *MetricsRepository) (*models.Metric, error) {
@@ -239,6 +253,7 @@ type CPUMetric struct {
 	Name          string
 	Type          string
 	generateValue func([]cpu.InfoStat) int32
+	Reset         resetMetric
 }
 
 func (c CPUMetric) Load(rep *MetricsRepository) (*models.Metric, error) {
@@ -257,4 +272,32 @@ var cpuMetricsDefinition = []CPUMetric{
 			return sum
 		},
 	},
+}
+
+func initResetMetrics(a *Agent) {
+	a.resetMetrics = make([]resetMetric, 0)
+
+	for _, m := range a.runtimeMetrics {
+		if m.Reset != nil {
+			a.resetMetrics = append(a.resetMetrics, m.Reset)
+		}
+	}
+
+	for _, m := range a.customMetrics {
+		if m.Reset != nil {
+			a.resetMetrics = append(a.resetMetrics, m.Reset)
+		}
+	}
+
+	for _, m := range a.virtualMemoryMetrics {
+		if m.Reset != nil {
+			a.resetMetrics = append(a.resetMetrics, m.Reset)
+		}
+	}
+
+	for _, m := range a.cpuMetrics {
+		if m.Reset != nil {
+			a.resetMetrics = append(a.resetMetrics, m.Reset)
+		}
+	}
 }

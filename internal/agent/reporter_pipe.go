@@ -15,6 +15,9 @@ import (
 // 1. Loads metrics from storage
 // 2. Sends metrics to the server
 func (a *Agent) runReporterPipe(ctx context.Context) {
+	a.reporterPipeLock.Lock()
+	defer a.reporterPipeLock.Unlock()
+
 	operationID := uuid.NewV4()
 	ctx = a.lg.WithContextFields(ctx, zap.String("operation_id", operationID.String()))
 
@@ -24,6 +27,12 @@ func (a *Agent) runReporterPipe(ctx context.Context) {
 
 	if err := g.Wait(); err != nil {
 		a.lg.ErrorCtx(ctx, "report failed", zap.Error(err))
+	}
+
+	for _, f := range a.resetMetrics {
+		if err := f(ctx, a); err != nil {
+			a.lg.ErrorCtx(ctx, "reset metric failed", zap.Error(err))
+		}
 	}
 
 	a.lg.InfoCtx(ctx, "finished")
@@ -119,24 +128,30 @@ func (a *Agent) report(
 	batchLock := &sync.Mutex{}
 
 	for m := range metrics {
-		g.Go(
-			func() error {
-				name, mtype, value := a.repository.SafeRead(m)
-				if err := a.reporter.UpdateMetric(ctx, mtype, name, value); err != nil {
-					a.repository.Release(m)
-					return fmt.Errorf("report_pipe: upload metric err %w", err)
-				}
+		if !a.batchReport {
+			g.Go(
+				func() error {
+					name, mtype, value := a.repository.SafeRead(m)
+					if err := a.reporter.UpdateMetric(ctx, mtype, name, value); err != nil {
+						a.repository.Release(m)
+						return fmt.Errorf("report_pipe: upload metric err %w", err)
+					}
 
-				return nil
-			},
-		)
-
-		batchLock.Lock()
-		batch = append(batch, m)
-		batchLock.Unlock()
+					return nil
+				},
+			)
+		} else {
+			batchLock.Lock()
+			batch = append(batch, m)
+			batchLock.Unlock()
+		}
 	}
 
 	if len(batch) == 0 {
+		return
+	}
+
+	if !a.batchReport {
 		return
 	}
 

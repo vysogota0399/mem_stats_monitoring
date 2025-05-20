@@ -48,4 +48,4 @@ func (m *MockIUpdateRestMetricService) Call(arg0 context.Context, arg1 service.U
 func (mr *MockIUpdateRestMetricServiceMockRecorder) Call(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Call", reflect.TypeOf((*MockIUpdateRestMetricService)(nil).Call), arg0, arg1)
-} 
+}

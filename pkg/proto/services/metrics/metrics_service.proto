@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package services.metrics;
+
+option go_package = "github.com/vysogota0399/mem_stats_monitoring/pkg/gen/services/metrics";
+
+import "pkg/proto/services/metrics/update_metric_params.proto";
+import "pkg/proto/services/metrics/update_metrics_batch_params.proto";
+import "pkg/proto/services/metrics/show_metric_params.proto";
+import "pkg/proto/services/metrics/show_metric_response.proto";
+import "pkg/proto/services/metrics/index_response.proto";
+import "google/protobuf/empty.proto";
+
+service MetricsService {
+  rpc Update(UpdateMetricParams) returns (google.protobuf.Empty);
+  rpc UpdateBatch(UpdateMetricsBatchParams) returns (google.protobuf.Empty);
+  rpc Show(ShowMetricParams) returns (ShowMetricResponse);
+  rpc Index(google.protobuf.Empty) returns (IndexResponse);
+  rpc Ping(google.protobuf.Empty) returns (google.protobuf.Empty);
+}
