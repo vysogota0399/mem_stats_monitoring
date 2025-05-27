@@ -18,6 +18,7 @@ type Storage interface {
 	GetCounters(ctx context.Context) ([]models.Counter, error)
 	GetGauges(ctx context.Context) ([]models.Gauge, error)
 	Ping(ctx context.Context) error
+	IncrementCounter(ctx context.Context, name string, delta int64) error
 }
 
 var ErrNoRecords = errors.New("memory: no records")

@@ -15,6 +15,9 @@ import (
 )
 
 func (a *Agent) runPollerPipe(ctx context.Context) error {
+	a.reporterPipeLock.Lock()
+	defer a.reporterPipeLock.Unlock()
+
 	operationID := uuid.NewV4()
 	ctx = a.lg.WithContextFields(ctx, zap.String("operation_id", operationID.String()))
 

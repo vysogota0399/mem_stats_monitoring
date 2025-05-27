@@ -2,9 +2,9 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"html/template"
 
-	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/server/config"
 	"github.com/vysogota0399/mem_stats_monitoring/internal/utils/logging"
@@ -33,14 +33,12 @@ func NewRouter(handlers []Handler, lc fx.Lifecycle, lg *logging.ZapLogger, cfg *
 	lc.Append(
 		fx.Hook{
 			OnStart: func(ctx context.Context) error {
-				r.router.Use(
-					gin.Recovery(),
-					headerMiddleware(),
-					httpLoggerMiddleware(lg),
-					signerMiddleware(lg, cfg),
-					decrypterMiddleware(lg, cfg, decrypter),
-					gzip.Gzip(gzip.DefaultCompression),
-				)
+				mws, err := middlewares(cfg, lg, decrypter)
+				if err != nil {
+					return fmt.Errorf("router: collect middlewares error %w", err)
+				}
+
+				r.router.Use(mws...)
 
 				for _, handler := range handlers {
 					route, err := handler.Registrate()

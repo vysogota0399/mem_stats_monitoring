@@ -8,10 +8,11 @@
 // common name, etc. The generation process is context-aware and can be cancelled.
 //
 // Example usage:
-//   cfg := &config.Config{...}
-//   lg := logging.NewZapLogger()
-//   generator := NewGenerator(cfg, lg)
-//   err := generator.Call(ctx)
+//
+//	cfg := &config.Config{...}
+//	lg := logging.NewZapLogger()
+//	generator := NewGenerator(cfg, lg)
+//	err := generator.Call(ctx)
 package keypair
 
 import (

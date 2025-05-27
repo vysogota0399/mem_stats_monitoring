@@ -36,16 +36,16 @@ func (m *MockConnectionOpener) EXPECT() *MockConnectionOpenerMockRecorder {
 }
 
 // OpenDB mocks base method.
-func (m *MockConnectionOpener) OpenDB(arg0 context.Context, arg1 string) (*sql.DB, error) {
+func (m *MockConnectionOpener) OpenDB(arg0 context.Context) (*sql.DB, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "OpenDB", arg0, arg1)
+	ret := m.ctrl.Call(m, "OpenDB", arg0)
 	ret0, _ := ret[0].(*sql.DB)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // OpenDB indicates an expected call of OpenDB.
-func (mr *MockConnectionOpenerMockRecorder) OpenDB(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockConnectionOpenerMockRecorder) OpenDB(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenDB", reflect.TypeOf((*MockConnectionOpener)(nil).OpenDB), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenDB", reflect.TypeOf((*MockConnectionOpener)(nil).OpenDB), arg0)
 }
